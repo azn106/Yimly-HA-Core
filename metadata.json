@@ -1,0 +1,10 @@
+{
+  "name": "Remix Yimly Home Assistant",
+  "description": "A high-compatibility backend server using official Home Assistant Core API, enabling direct registration, tracking, and telemetry updates from official Companion Apps.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,31 @@
+services:
+  yimly_home:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yimly-assistant
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+      - DATA_DIR=/data
+      - DATABASE_URL=sqlite+aiosqlite:////data/ha_server.db
+      - UPLOADS_DIR=/data/uploads
+      - PORT=3000
+    volumes:
+      - yimly_assistant_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/setup/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cloudflared_bridge
+
+volumes:
+  yimly_assistant_data:
+    driver: local
+
+networks:
+  cloudflared_bridge:
+    external: true

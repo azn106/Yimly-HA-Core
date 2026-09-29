@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Yimly Home Assistant</title>
+    <meta name="description" content="A high-compatibility backend server using official Home Assistant Core API, enabling direct registration, tracking, and telemetry updates from official Companion Apps." />
+    <meta property="og:title" content="Yimly Home Assistant" />
+    <meta property="og:description" content="A high-compatibility backend server using official Home Assistant Core API, enabling direct registration, tracking, and telemetry updates from official Companion Apps." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    
+    <!-- PWA & Apple Standalone Tags -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Yimly Home" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#2563eb" />
+
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body>
+    <!-- Global Squircle / Superellipse SVG Clip Paths -->
+    <svg className="absolute w-0 h-0 pointer-events-none" width="0" height="0" style="position: absolute; width: 0; height: 0; pointer-events: none;">
+      <defs>
+        <clipPath id="squircle-clip-app" clipPathUnits="objectBoundingBox">
+          <path d="M 0.5,0 C 0.86,0 1,0.14 1,0.5 C 1,0.86 0.86,1 0.5,1 C 0.14,1 0,0.86 0,0.5 C 0,0.14 0.14,0 0.5,0 Z" />
+        </clipPath>
+        <clipPath id="squircle-clip-map" clipPathUnits="objectBoundingBox">
+          <path d="M 0.5,0 C 0.86,0 1,0.14 1,0.5 C 1,0.86 0.86,1 0.5,1 C 0.14,1 0,0.86 0,0.5 C 0,0.14 0.14,0 0.5,0 Z" />
+        </clipPath>
+      </defs>
+    </svg>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
