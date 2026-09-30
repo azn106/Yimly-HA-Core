@@ -281,7 +281,7 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
     logger.info("[TEMPORARY DIAGNOSTIC] --------------------------------------------------")
 
     if lat is not None and lon is not None:
-        # Use TelemetryService (authoritative chronological freshness is handled inside StateService)
+        # Process location update through TelemetryService (which delegates freshness enforcement to StateService)
         await TelemetryService.process_location_update(db, device, loc_data)
     else:
         # Heartbeat without coordinates: update last_seen_at without destroying last valid coords
@@ -299,6 +299,11 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
                 existing_entity.attributes["charging"] = charging
         await db.commit()
 
+    # Retrieve current entity state to return accurate current coordinates in diagnostics
+    stmt_entity_final = select(EntityState).where(EntityState.entity_id == entity_id)
+    res_entity_final = await db.execute(stmt_entity_final)
+    final_entity = res_entity_final.scalar_one_or_none()
+
     return JSONResponse(
         content={
             "success": True,
@@ -306,11 +311,11 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
             "diagnostics": {
                 "userId": user.id,
                 "entityId": entity_id,
-                "lat": lat if (lat is not None and is_newer_fix) else (existing_entity.latitude if existing_entity else None),
-                "lon": lon if (lon is not None and is_newer_fix) else (existing_entity.longitude if existing_entity else None),
+                "lat": final_entity.latitude if final_entity else None,
+                "lon": final_entity.longitude if final_entity else None,
                 "speedMps": speed_mps,
                 "battery": battery,
-                "timestamp": fix_dt.isoformat()
+                "timestamp": fix_dt.isoformat() if hasattr(fix_dt, "isoformat") else str(fix_dt)
             }
         },
         status_code=status.HTTP_200_OK
