@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from app.core.config import settings
 from app.core.logging import setup_logging, logger
 from app.db.database import Base, engine
-from app.api import auth, rest, mobile_app, webhook, websocket, circles, places, alerts
+from app.api import auth, rest, mobile_app, webhook, websocket, circles, places, alerts, traccar
 
 # Initialize logging configuration
 setup_logging()
@@ -301,6 +301,7 @@ app.include_router(websocket.router)
 app.include_router(circles.router)
 app.include_router(places.router)
 app.include_router(alerts.router)
+app.include_router(traccar.router)
 
 # Serve the static compiled React app from dist/
 dist_path = os.path.join(os.getcwd(), "dist")

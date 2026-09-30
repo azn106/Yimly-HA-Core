@@ -364,7 +364,36 @@ export interface LocationHistoryEntry {
   longitude: number;
   battery_level?: number;
   accuracy?: number;
+  altitude?: number;
+  speed?: number;
+  bearing?: number;
   timestamp: string;
+}
+
+export interface DeviceData {
+  id?: number;
+  user_id: number;
+  device_id: string;
+  app_id: string;
+  app_name: string;
+  app_version?: string;
+  device_name: string;
+  manufacturer?: string;
+  model?: string;
+  os_name?: string;
+  os_version?: string;
+  supports_encryption?: boolean;
+  app_data?: Record<string, any>;
+  webhook_id: string;
+  webhook_secret_hash?: string;
+  webhook_secret?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_seen_at?: string;
+  low_battery_alert_triggered?: boolean;
+  last_known_battery?: number;
+  device_offline_alert_triggered?: boolean;
+  first_telemetry_received?: boolean;
 }
 
 export interface PlaceData {
@@ -1087,6 +1116,8 @@ app.post("/api/setup/register", (req, res) => {
   db.circle_members.push({ circle_id: initialCircle.id, user_id: newUser.id });
   saveDB(db);
 
+  ensureTraccarDeviceForUser(newUser.id);
+
   const token = jwt.sign({ sub: String(newUser.id) }, JWT_SECRET, { expiresIn: "30d" });
 
   res.json({
@@ -1147,6 +1178,8 @@ app.post("/api/auth/register", (req, res) => {
   }
   saveDB(db);
 
+  ensureTraccarDeviceForUser(newUser.id);
+
   const token = jwt.sign({ sub: String(newUser.id) }, JWT_SECRET, { expiresIn: "30d" });
 
   res.json({
@@ -1167,6 +1200,8 @@ app.post("/api/auth/login", (req, res) => {
   if (!found || !bcrypt.compareSync(password, found.password_hash)) {
     return res.status(401).json({ detail: "Invalid username or password" });
   }
+
+  ensureTraccarDeviceForUser(found.id);
 
   const token = jwt.sign({ sub: String(found.id) }, JWT_SECRET, { expiresIn: "30d" });
 
@@ -2335,27 +2370,402 @@ app.put("/api/circles/:circleId/alerts/:alertId/read", authenticateToken, (req: 
 
 
 // Devices API
+export function ensureTraccarDeviceForUser(userId: number): DeviceData {
+  db = loadDB();
+  db.devices = db.devices || [];
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) {
+    throw new Error(`User with ID ${userId} not found`);
+  }
+
+  // Check if a Traccar device already exists for this user
+  let device = db.devices.find(
+    (d) => d.user_id === userId && (d.app_id === "org.traccar.client" || d.device_id === user.username)
+  );
+
+  if (!device) {
+    // Generate unguessable 32-character hex token
+    const token = crypto.randomBytes(16).toString("hex");
+    const deviceId = user.username;
+    const deviceName = `${user.display_name || user.username}'s Phone`;
+
+    device = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      user_id: userId,
+      device_id: deviceId,
+      app_id: "org.traccar.client",
+      app_name: "Traccar Client",
+      device_name: deviceName,
+      manufacturer: "Traccar",
+      model: "Traccar Client",
+      os_name: "Mobile",
+      os_version: "10.0",
+      webhook_id: token,
+      created_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      first_telemetry_received: false,
+      low_battery_alert_triggered: false,
+      device_offline_alert_triggered: false
+    };
+    db.devices.push(device);
+
+    // Also ensure the corresponding EntityState exists
+    const entityId = `device_tracker.${user.username.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+    db.entity_states = db.entity_states || [];
+    let entity = db.entity_states.find((e) => e.entity_id === entityId);
+    if (!entity) {
+      entity = {
+        entity_id: entityId,
+        user_id: userId,
+        domain: "device_tracker",
+        state: "not_home",
+        attributes: {
+          friendly_name: deviceName,
+          source_type: "gps",
+          platform: "Traccar",
+          map_icon: "Phone",
+          location_visibility: "family",
+          allow_find_my_device: true,
+          battery_level: 100
+        },
+        latitude: null,
+        longitude: null,
+        last_updated: new Date().toISOString()
+      };
+      db.entity_states.push(entity);
+    }
+    saveDB(db);
+  } else {
+    // Make sure device_id is synced to username
+    if (device.device_id !== user.username) {
+      device.device_id = user.username;
+      saveDB(db);
+    }
+  }
+
+  return device;
+}
+
 app.get("/api/devices", authenticateToken, (req: AuthRequest, res) => {
   db = loadDB();
   const userId = req.user!.id;
+  ensureTraccarDeviceForUser(userId);
+  db = loadDB();
   const userTrackers = db.entity_states.filter(
     (e) => e.user_id === userId && e.domain === "device_tracker"
   );
 
-  const result = userTrackers.map((dt) => ({
-    entity_id: dt.entity_id,
-    name: dt.attributes?.friendly_name || dt.entity_id,
-    platform: dt.attributes?.platform || "Android",
-    battery: dt.attributes?.battery_level ?? 100,
-    state: dt.state || "home",
-    last_updated: dt.last_updated,
-    location_visibility: (dt.attributes?.location_visibility || "family") as "family" | "me_only",
-    map_icon: dt.attributes?.map_icon || "Phone",
-    allow_find_my_device: dt.attributes?.allow_find_my_device !== false
-  }));
+  const result = userTrackers.map((dt) => {
+    const matchingDevice = (db.devices || []).find(
+      (d) => d.user_id === userId && (dt.entity_id.includes(d.device_id) || d.app_id === "org.traccar.client")
+    );
+    return {
+      entity_id: dt.entity_id,
+      name: dt.attributes?.friendly_name || dt.entity_id,
+      platform: dt.attributes?.platform || (matchingDevice?.app_name || "Traccar Client"),
+      battery: dt.attributes?.battery_level ?? matchingDevice?.last_known_battery ?? 100,
+      state: dt.state || "home",
+      last_updated: dt.last_updated,
+      location_visibility: (dt.attributes?.location_visibility || "family") as "family" | "me_only",
+      map_icon: dt.attributes?.map_icon || "Phone",
+      allow_find_my_device: dt.attributes?.allow_find_my_device !== false,
+      is_traccar: Boolean(matchingDevice?.app_id === "org.traccar.client" || dt.attributes?.platform === "Traccar"),
+      traccar_device_id: matchingDevice?.device_id || null,
+      traccar_token: matchingDevice?.webhook_id || null
+    };
+  });
 
   res.json(result);
 });
+
+// Dedicated Traccar configuration endpoint
+app.get("/api/traccar/config", authenticateToken, (req: AuthRequest, res) => {
+  db = loadDB();
+  const userId = req.user!.id;
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ detail: "User not found" });
+  }
+
+  const device = ensureTraccarDeviceForUser(userId);
+  const host = req.get("host") || "127.0.0.1:3000";
+  const protocol = req.protocol === "https" || req.get("x-forwarded-proto") === "https" ? "https" : "http";
+  const serverUrl = `${protocol}://${host}/api/traccar/${device.webhook_id}`;
+
+  const entityId = `device_tracker.${user.username.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+  const entity = (db.entity_states || []).find((e) => e.entity_id === entityId);
+
+  res.json({
+    device_id: user.username,
+    token: device.webhook_id,
+    server_url: serverUrl,
+    qr_uri: `${serverUrl}?id=${encodeURIComponent(user.username)}`,
+    last_seen_at: device.last_seen_at,
+    battery: device.last_known_battery ?? entity?.attributes?.battery_level ?? null,
+    latitude: entity?.latitude ?? null,
+    longitude: entity?.longitude ?? null,
+    first_telemetry_received: device.first_telemetry_received ?? false
+  });
+});
+
+// Dedicated Traccar Client Location Telemetry Ingestion Endpoint
+const handleTraccarPayload = (req: Request, res: Response) => {
+  db = loadDB();
+  db.devices = db.devices || [];
+  db.entity_states = db.entity_states || [];
+  db.location_history = db.location_history || [];
+
+  const token = req.params.token || req.query.token || req.body?.token;
+  if (!token || typeof token !== "string") {
+    return res.status(401).json({ detail: "Missing or invalid Traccar token" });
+  }
+
+  const matchingDevice = db.devices.find((d) => d.webhook_id === token);
+  if (!matchingDevice) {
+    return res.status(404).json({ detail: "Invalid or revoked Traccar token" });
+  }
+
+  const user = db.users.find((u) => u.id === matchingDevice.user_id);
+  if (!user) {
+    return res.status(404).json({ detail: "User not found for this Traccar device" });
+  }
+
+  // Combine query and body parameters
+  const params: Record<string, any> = { ...req.query, ...req.body };
+
+  // Validate Traccar Device ID corresponds to user's username
+  const rawId = params.id !== undefined && params.id !== null ? String(params.id).trim() :
+               (params.deviceid !== undefined && params.deviceid !== null ? String(params.deviceid).trim() : "");
+  if (rawId && rawId.toLowerCase() !== user.username.toLowerCase()) {
+    return res.status(400).json({
+      detail: `Traccar Device ID '${rawId}' does not match expected username '${user.username}'`
+    });
+  }
+
+  // Coordinate parsing and validation
+  const hasLat = params.lat !== undefined && params.lat !== null && String(params.lat).trim() !== "";
+  const hasLon = params.lon !== undefined && params.lon !== null && String(params.lon).trim() !== "";
+
+  let lat: number | null = null;
+  let lon: number | null = null;
+
+  if (hasLat || hasLon) {
+    if (!hasLat || !hasLon) {
+      return res.status(400).json({ detail: "Both latitude and longitude must be provided" });
+    }
+    lat = parseFloat(String(params.lat));
+    lon = parseFloat(String(params.lon));
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return res.status(400).json({ detail: "Invalid latitude: must be between -90 and 90" });
+    }
+    if (isNaN(lon) || lon < -180 || lon > 180) {
+      return res.status(400).json({ detail: "Invalid longitude: must be between -180 and 180" });
+    }
+  }
+
+  // Speed conversion: Traccar sends speed in KNOTS! Convert to metres/second (1 knot = 0.514444 m/s)
+  let speedMps: number | null = null;
+  if (params.speed !== undefined && params.speed !== null && String(params.speed).trim() !== "") {
+    const speedKnots = parseFloat(String(params.speed));
+    if (!isNaN(speedKnots)) {
+      speedMps = Math.round(speedKnots * 0.514444 * 100) / 100;
+    }
+  }
+
+  // Timestamp conversion: Traccar Unix timestamp in seconds to UTC ISO string
+  let fixDate: Date;
+  if (params.timestamp !== undefined && params.timestamp !== null && String(params.timestamp).trim() !== "") {
+    const tsNum = Number(params.timestamp);
+    if (!isNaN(tsNum)) {
+      // If seconds epoch (< 10000000000), multiply by 1000
+      const ms = tsNum < 10000000000 ? tsNum * 1000 : tsNum;
+      fixDate = new Date(ms);
+    } else {
+      const parsed = new Date(String(params.timestamp));
+      fixDate = isNaN(parsed.getTime()) ? new Date() : parsed;
+    }
+  } else {
+    fixDate = new Date();
+  }
+  const fixIso = fixDate.toISOString();
+
+  // Accuracy
+  let accuracy: number | null = null;
+  if (params.accuracy !== undefined && params.accuracy !== null && String(params.accuracy).trim() !== "") {
+    const acc = parseFloat(String(params.accuracy));
+    if (!isNaN(acc)) accuracy = acc;
+  }
+
+  // Altitude
+  let altitude: number | null = null;
+  if (params.altitude !== undefined && params.altitude !== null && String(params.altitude).trim() !== "") {
+    const alt = parseFloat(String(params.altitude));
+    if (!isNaN(alt)) altitude = alt;
+  }
+
+  // Bearing / course
+  let bearing: number | null = null;
+  const rawBearing = params.bearing ?? params.heading;
+  if (rawBearing !== undefined && rawBearing !== null && String(rawBearing).trim() !== "") {
+    const b = parseFloat(String(rawBearing));
+    if (!isNaN(b)) bearing = b;
+  }
+
+  // Battery
+  let battery: number | null = null;
+  const rawBatt = params.batt ?? params.battery;
+  if (rawBatt !== undefined && rawBatt !== null && String(rawBatt).trim() !== "") {
+    const batt = parseFloat(String(rawBatt));
+    if (!isNaN(batt)) battery = Math.max(0, Math.min(100, Math.round(batt)));
+  }
+
+  // Charging
+  let charging: boolean | null = null;
+  const rawCharge = params.charge ?? params.charging;
+  if (rawCharge !== undefined && rawCharge !== null) {
+    const cStr = String(rawCharge).toLowerCase().trim();
+    charging = cStr === "true" || cStr === "1";
+  }
+
+  // Update Device record
+  matchingDevice.last_seen_at = new Date().toISOString();
+  matchingDevice.first_telemetry_received = true;
+  matchingDevice.device_offline_alert_triggered = false;
+  if (battery !== null) {
+    matchingDevice.last_known_battery = battery;
+  }
+
+  const entityId = `device_tracker.${user.username.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+  const existingIdx = db.entity_states.findIndex((e) => e.entity_id === entityId);
+  const existingEntity = existingIdx !== -1 ? db.entity_states[existingIdx] : null;
+
+  // IMPORTANT TIMESTAMP RULE:
+  // Traccar can queue locations while offline and later upload old locations.
+  // 1. LocationHistory must retain the actual Traccar fix timestamp.
+  // 2. An old buffered location must NOT move the current map marker backwards.
+  // 3. Only update the current EntityState location when the incoming fix is newer than the currently stored location timestamp.
+  const existingTime = existingEntity && existingEntity.last_updated ? new Date(existingEntity.last_updated).getTime() : 0;
+  const newTime = fixDate.getTime();
+  const isNewerFix = newTime >= existingTime;
+
+  if (lat !== null && lon !== null) {
+    // 1. Record in LocationHistory with the actual Traccar fix timestamp
+    if (user.save_location_history !== false) {
+      db.location_history.push({
+        id: crypto.randomBytes(8).toString("hex"),
+        entity_id: entityId,
+        user_id: user.id,
+        latitude: lat,
+        longitude: lon,
+        battery_level: battery ?? (existingEntity?.attributes?.battery_level ?? 100),
+        accuracy: accuracy ?? 5,
+        altitude: altitude ?? undefined,
+        speed: speedMps ?? undefined,
+        bearing: bearing ?? undefined,
+        timestamp: fixIso // Retain the actual Traccar fix timestamp!
+      });
+      cleanupHistoryForUser(db, user.id, user.history_retention);
+    }
+
+    // 2. Update current EntityState only if this fix is newer than existing state
+    if (isNewerFix) {
+      const updatedAttributes = {
+        ...(existingEntity?.attributes || {}),
+        friendly_name: matchingDevice.device_name || `${user.display_name || user.username}'s Phone`,
+        source_type: "gps",
+        platform: "Traccar",
+        gps_accuracy: accuracy ?? existingEntity?.attributes?.gps_accuracy ?? 5,
+        battery_level: battery !== null ? battery : (existingEntity?.attributes?.battery_level ?? 100),
+        battery: battery !== null ? battery : (existingEntity?.attributes?.battery ?? 100),
+        charging: charging !== null ? charging : (existingEntity?.attributes?.charging ?? false),
+        altitude: altitude !== null ? altitude : existingEntity?.attributes?.altitude,
+        speed: speedMps !== null ? speedMps : existingEntity?.attributes?.speed,
+        course: bearing !== null ? bearing : existingEntity?.attributes?.course,
+        location_visibility: existingEntity?.attributes?.location_visibility || "family",
+        map_icon: existingEntity?.attributes?.map_icon || "Phone",
+        allow_find_my_device: existingEntity?.attributes?.allow_find_my_device !== false
+      };
+
+      const updatedState: EntityStateData = {
+        entity_id: entityId,
+        user_id: user.id,
+        domain: "device_tracker",
+        state: "not_home",
+        attributes: updatedAttributes,
+        latitude: lat,
+        longitude: lon,
+        last_updated: fixIso
+      };
+
+      if (existingIdx !== -1) {
+        db.entity_states[existingIdx] = updatedState;
+      } else {
+        db.entity_states.push(updatedState);
+      }
+
+      try {
+        evaluateGeofencingPreview(user.id, entityId, lat, lon);
+      } catch (err) {
+        console.error("Error evaluating geofencing for Traccar update:", err);
+      }
+      if (battery !== null) {
+        try {
+          evaluateLowBatteryPreview(user.id, entityId, battery);
+        } catch (err) {
+          console.error("Error evaluating low battery for Traccar update:", err);
+        }
+      }
+      try {
+        updateDeviceOfflinePreview(user.id, entityId);
+      } catch (err) {
+        console.error("Error updating offline status for Traccar update:", err);
+      }
+
+      // Broadcast update over WebSocket to update live map
+      broadcastStateUpdate({
+        event_type: "state_changed",
+        data: {
+          entity_id: entityId,
+          new_state: updatedState
+        }
+      });
+    }
+  } else {
+    // Missing coordinates / heartbeat:
+    // Update battery/charging and last_seen, but DO NOT destroy the last valid coordinates!
+    if (existingEntity) {
+      existingEntity.attributes = existingEntity.attributes || {};
+      if (battery !== null) {
+        existingEntity.attributes.battery_level = battery;
+        existingEntity.attributes.battery = battery;
+      }
+      if (charging !== null) {
+        existingEntity.attributes.charging = charging;
+      }
+    }
+  }
+
+  saveDB(db);
+
+  return res.status(200).json({
+    success: true,
+    message: "Traccar telemetry processed successfully",
+    diagnostics: {
+      userId: user.id,
+      entityId,
+      lat: lat !== null && isNewerFix ? lat : existingEntity?.latitude,
+      lon: lon !== null && isNewerFix ? lon : existingEntity?.longitude,
+      speedMps,
+      battery,
+      timestamp: fixIso,
+      updated_current_state: isNewerFix && lat !== null
+    }
+  });
+};
+
+app.post(["/api/traccar/:token", "/api/traccar"], handleTraccarPayload);
+app.get(["/api/traccar/:token", "/api/traccar"], handleTraccarPayload);
 
 app.put("/api/devices/:entity_id", authenticateToken, (req: AuthRequest, res) => {
   const { name, location_visibility, map_icon, allow_find_my_device } = req.body;

@@ -1249,10 +1249,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   // ----------------------------------------------------
-  // SECTION 6: DEVICES STATE
+  // SECTION 6: DEVICES STATE (TRACCAR CLIENT INTEGRATION)
   // ----------------------------------------------------
   const [devicesList, setDevicesList] = useState<UserDevice[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
+  const [traccarConfig, setTraccarConfig] = useState<{
+    device_id: string;
+    token: string;
+    server_url: string;
+    qr_uri: string;
+    last_seen_at?: string;
+    battery?: number | null;
+    first_telemetry_received?: boolean;
+  } | null>(null);
+  const [traccarQrUrl, setTraccarQrUrl] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
   const [editDeviceName, setEditDeviceName] = useState("");
   const [deleteConfirmDevice, setDeleteConfirmDevice] = useState<UserDevice | null>(null);
@@ -1273,11 +1284,34 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         const data = await res.json();
         setDevicesList(data);
       }
+
+      // Fetch Traccar configuration
+      const traccarRes = await fetch("/api/traccar/config", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (traccarRes.ok) {
+        const tData = await traccarRes.json();
+        setTraccarConfig(tData);
+        if (tData.qr_uri) {
+          try {
+            const qrData = await QRCode.toDataURL(tData.qr_uri, { margin: 1, width: 180 });
+            setTraccarQrUrl(qrData);
+          } catch {}
+        }
+      }
     } catch (err) {
       console.error("Failed to fetch user devices:", err);
     } finally {
       setDevicesLoading(false);
     }
+  };
+
+  const handleCopyText = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   useEffect(() => {
@@ -2289,6 +2323,100 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
             )}
 
+            {/* Traccar Client Official Setup Card */}
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/90 via-slate-50 to-purple-50/40 border border-indigo-100/80 shadow-2xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                    <Radio className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black tracking-tight text-slate-800 flex items-center gap-2">
+                      Traccar GPS Location Source
+                      {traccarConfig?.first_telemetry_received ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                          Active & Tracking
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Ready for Setup
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Official Traccar Client (iOS & Android) streams your live location to your circle
+                    </p>
+                  </div>
+                </div>
+
+                {traccarConfig?.last_seen_at && (
+                  <div className="text-[11px] text-slate-400 font-medium sm:text-right">
+                    Last Seen: {new Date(traccarConfig.last_seen_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </div>
+                )}
+              </div>
+
+              {traccarConfig ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Server URL
+                    </label>
+                    <div className="flex items-center gap-2 bg-white/90 border border-slate-200/80 rounded-xl p-2.5">
+                      <span className="text-xs font-mono text-slate-700 truncate select-all flex-1">
+                        {traccarConfig.server_url}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(traccarConfig.server_url, "url")}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        {copiedField === "url" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedField === "url" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Device ID (Yimly Username)
+                    </label>
+                    <div className="flex items-center gap-2 bg-white/90 border border-slate-200/80 rounded-xl p-2.5">
+                      <span className="text-xs font-mono font-bold text-slate-800 truncate select-all flex-1">
+                        {traccarConfig.device_id}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(traccarConfig.device_id, "id")}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        {copiedField === "id" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedField === "id" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {traccarQrUrl && (
+                    <div className="md:col-span-2 pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center gap-4">
+                      <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs shrink-0">
+                        <img src={traccarQrUrl} alt="Traccar Setup QR Code" className="w-24 h-24" />
+                      </div>
+                      <div className="text-xs text-slate-600 space-y-1 text-center sm:text-left">
+                        <p className="font-bold text-slate-800">Scan QR Code in Traccar Client</p>
+                        <p className="text-slate-500 text-[11px]">
+                          Open official Traccar Client → Settings → tap the QR Scanner icon in the top right to auto-configure Server URL and Device ID in one tap.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 font-medium py-2">
+                  Loading Traccar connection details...
+                </div>
+              )}
+            </div>
+
             {devicesLoading ? (
               <div className="flex items-center justify-center py-8 text-slate-400 text-xs font-semibold">
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" />
@@ -2296,7 +2424,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
             ) : devicesList.length === 0 ? (
               <div className="text-center py-6 text-slate-400 text-xs font-medium">
-                No companion device trackers detected. Install or pair the Home Assistant Companion app to track position.
+                No location updates received yet. Configure your phone in the Traccar Client app using the setup details above to begin tracking.
               </div>
             ) : (
               devicesList.map((device) => {
