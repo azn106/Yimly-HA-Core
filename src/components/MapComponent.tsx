@@ -424,6 +424,16 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
   const isControlled = propSelectedMemberId !== undefined;
   const selectedMemberId = isControlled ? propSelectedMemberId : internalSelectedMemberId;
 
+  // Auto-Follow Mode States & Refs
+  const [isFollowing, setIsFollowingState] = useState<boolean>(false);
+  const isFollowingRef = useRef<boolean>(false);
+  const lastFollowedCoordRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  const setIsFollowing = useCallback((val: boolean) => {
+    isFollowingRef.current = val;
+    setIsFollowingState(val);
+  }, []);
+
   const setSelectedMemberId = useCallback((id: number | null) => {
     setInternalSelectedMemberId(id);
     if (onSelectMemberId) {
@@ -1087,6 +1097,21 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
       console.error("[MapLibre GL Error]", e);
     });
 
+    const handleUserInteractionStart = (e: maplibregl.MapLibreEvent<MouseEvent | TouchEvent | WheelEvent>) => {
+      if (e.originalEvent) {
+        // Manual user gesture (drag, pan, zoom gesture) disables auto-follow mode
+        isFollowingRef.current = false;
+        setIsFollowingState(false);
+      }
+    };
+
+    map.on("dragstart", () => {
+      isFollowingRef.current = false;
+      setIsFollowingState(false);
+    });
+
+    map.on("movestart", handleUserInteractionStart);
+
     mapRef.current = map;
 
     // Set up ResizeObserver to observe the container element
@@ -1280,6 +1305,8 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
     const map = mapRef.current;
     if (!map || membersWithLocation.length === 0) return;
 
+    setIsFollowing(false);
+
     if (membersWithLocation.length === 1) {
       const primaryDevice = membersWithLocation[0].devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || membersWithLocation[0].devices?.[0];
       if (primaryDevice && isValidCoordinate(primaryDevice.latitude, primaryDevice.longitude)) {
@@ -1311,7 +1338,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
     setHistoryData([]);
     setIsCardHidden(false);
     navMemberHistoryRef.current = [];
-  }, [membersWithLocation, setSelectedMemberId]);
+  }, [membersWithLocation, setSelectedMemberId, setIsFollowing]);
 
   // Card-aware bottom padding calculation
   const getBottomPadding = useCallback((isHidden: boolean) => {
@@ -1394,17 +1421,23 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
       navMemberHistoryRef.current.push(selectedMemberId);
     }
     setSelectedMemberId(targetMember.id);
+    setIsFollowing(true);
     setCustomDateError(null);
     setIsCardHidden(false);
     setSheetState("expanded");
     setMobilePage(0);
+
+    const dev = targetMember.devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || targetMember.devices?.[0];
+    if (dev && isValidCoordinate(dev.latitude, dev.longitude)) {
+      lastFollowedCoordRef.current = { lat: dev.latitude, lng: dev.longitude };
+    }
 
     // Direct flyTo using clicked member's current coordinates
     flyToMemberLocation(targetMember, false, 800);
     if (isHistoryOpen) {
       fetchMemberHistory(targetMember.id, activeRange);
     }
-  }, [selectedMemberId, members, isHistoryOpen, activeRange, fetchMemberHistory, flyToMemberLocation, setSelectedMemberId]);
+  }, [selectedMemberId, members, isHistoryOpen, activeRange, fetchMemberHistory, flyToMemberLocation, setSelectedMemberId, setIsFollowing]);
 
   // Recenter map on the currently selected member's valid location without changing selection
   const handleRecenterSelectedMember = useCallback(() => {
@@ -1412,8 +1445,10 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
     const dev = selectedMember.devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || selectedMember.devices?.[0];
     if (!dev || !isValidCoordinate(dev.latitude, dev.longitude)) return;
 
+    setIsFollowing(true);
+    lastFollowedCoordRef.current = { lat: dev.latitude, lng: dev.longitude };
     flyToMemberLocation(selectedMember, isCardHidden, 800);
-  }, [selectedMember, flyToMemberLocation, isCardHidden]);
+  }, [selectedMember, flyToMemberLocation, isCardHidden, setIsFollowing]);
 
   useImperativeHandle(ref, () => ({
     focusMember: handleFocusMember
@@ -1424,11 +1459,17 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
     if (propSelectedMemberId !== undefined && propSelectedMemberId !== internalSelectedMemberId) {
       if (propSelectedMemberId === null) {
         setInternalSelectedMemberId(null);
+        setIsFollowing(false);
       } else {
         const member = members.find(m => m.id === propSelectedMemberId);
         if (member) {
           setInternalSelectedMemberId(propSelectedMemberId);
+          setIsFollowing(true);
           setIsCardHidden(false);
+          const dev = member.devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || member.devices?.[0];
+          if (dev && isValidCoordinate(dev.latitude, dev.longitude)) {
+            lastFollowedCoordRef.current = { lat: dev.latitude, lng: dev.longitude };
+          }
           const timer = setTimeout(() => {
             flyToMemberLocation(member, false, 800);
           }, 50);
@@ -1439,7 +1480,41 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
         }
       }
     }
-  }, [propSelectedMemberId, internalSelectedMemberId, members, flyToMemberLocation, isHistoryOpen, activeRange, fetchMemberHistory]);
+  }, [propSelectedMemberId, internalSelectedMemberId, members, flyToMemberLocation, isHistoryOpen, activeRange, fetchMemberHistory, setIsFollowing]);
+
+  // Follow Mode: Smoothly move map camera when selected member receives new valid GPS location updates
+  useEffect(() => {
+    if (!isFollowingRef.current || !selectedMemberId || isCardHidden) return;
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    const dev = selectedMember?.devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || selectedMember?.devices?.[0];
+    if (!dev || !isValidCoordinate(dev.latitude, dev.longitude)) return;
+
+    const last = lastFollowedCoordRef.current;
+    if (last && last.lat === dev.latitude && last.lng === dev.longitude) {
+      return; // No position change
+    }
+
+    lastFollowedCoordRef.current = { lat: dev.latitude, lng: dev.longitude };
+
+    const bottomPad = getBottomPadding(isCardHidden);
+    const topPad = 76;
+
+    currentTargetCoordRef.current = [dev.longitude, dev.latitude];
+
+    const currentZoom = map.getZoom();
+    const targetZoom = currentZoom < 14 ? 15 : currentZoom;
+
+    map.easeTo({
+      center: [dev.longitude, dev.latitude],
+      zoom: targetZoom,
+      padding: { top: topPad, bottom: bottomPad, left: 0, right: 0 },
+      duration: 800,
+      essential: true
+    });
+  }, [selectedMember, selectedMemberId, isCardHidden, getBottomPadding]);
 
   // Show Card action: restores card and re-centers member in usable area above card
   const handleShowCard = useCallback(() => {
@@ -1523,13 +1598,14 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
   // Close Card action
   const handleCloseCard = useCallback(() => {
     setSelectedMemberId(null);
+    setIsFollowing(false);
     setIsHistoryOpen(false);
     setIsCustomRangeActive(false);
     setHistoryData([]);
     setIsCardHidden(false);
     currentTargetCoordRef.current = null;
     navMemberHistoryRef.current = [];
-  }, []);
+  }, [setSelectedMemberId, setIsFollowing]);
 
   // Toggle History control within card
   const handleToggleHistory = useCallback(() => {
