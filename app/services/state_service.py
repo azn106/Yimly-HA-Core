@@ -48,15 +48,27 @@ class StateService:
         if entity and entity.last_updated:
             entity_updated = entity.last_updated
             t_ts = target_timestamp
-            # Timezone safety: align naive vs aware datetimes
-            if entity_updated.tzinfo is None and t_ts.tzinfo is not None:
-                t_ts = t_ts.replace(tzinfo=None)
-            elif entity_updated.tzinfo is not None and t_ts.tzinfo is None:
-                entity_updated = entity_updated.replace(tzinfo=None)
+            if isinstance(entity_updated, str):
+                try:
+                    entity_updated = datetime.fromisoformat(entity_updated.replace("Z", "+00:00"))
+                except Exception:
+                    entity_updated = None
+            if isinstance(t_ts, str):
+                try:
+                    t_ts = datetime.fromisoformat(t_ts.replace("Z", "+00:00"))
+                except Exception:
+                    t_ts = None
 
-            if t_ts < entity_updated:
-                # Reject mutation from an older GPS fix. Retain existing state and skip broadcast.
-                return entity
+            if entity_updated and t_ts:
+                # Timezone safety: align naive vs aware datetimes
+                if entity_updated.tzinfo is None and t_ts.tzinfo is not None:
+                    t_ts = t_ts.replace(tzinfo=None)
+                elif entity_updated.tzinfo is not None and t_ts.tzinfo is None:
+                    entity_updated = entity_updated.replace(tzinfo=None)
+
+                if t_ts < entity_updated:
+                    # Reject mutation from an older GPS fix. Retain existing state and skip broadcast.
+                    return entity
 
         old_state = None
         if entity:
@@ -64,8 +76,8 @@ class StateService:
                 "entity_id": entity.entity_id,
                 "state": entity.state,
                 "attributes": entity.attributes,
-                "last_changed": entity.last_changed.isoformat() if entity.last_changed else now.isoformat(),
-                "last_updated": entity.last_updated.isoformat() if entity.last_updated else now.isoformat()
+                "last_changed": entity.last_changed.isoformat() if hasattr(entity.last_changed, "isoformat") else str(entity.last_changed or now.isoformat()),
+                "last_updated": entity.last_updated.isoformat() if hasattr(entity.last_updated, "isoformat") else str(entity.last_updated or now.isoformat())
             }
             entity.user_id = user_id
             if device_id is not None:
@@ -110,7 +122,18 @@ class StateService:
             if entity:
                 entity_updated = entity.last_updated
                 t_ts = target_timestamp
-                if entity_updated:
+                if isinstance(entity_updated, str):
+                    try:
+                        entity_updated = datetime.fromisoformat(entity_updated.replace("Z", "+00:00"))
+                    except Exception:
+                        entity_updated = None
+                if isinstance(t_ts, str):
+                    try:
+                        t_ts = datetime.fromisoformat(t_ts.replace("Z", "+00:00"))
+                    except Exception:
+                        t_ts = None
+
+                if entity_updated and t_ts:
                     if entity_updated.tzinfo is None and t_ts.tzinfo is not None:
                         t_ts = t_ts.replace(tzinfo=None)
                     elif entity_updated.tzinfo is not None and t_ts.tzinfo is None:
@@ -123,8 +146,8 @@ class StateService:
                     "entity_id": entity.entity_id,
                     "state": entity.state,
                     "attributes": entity.attributes,
-                    "last_changed": entity.last_changed.isoformat() if entity.last_changed else now.isoformat(),
-                    "last_updated": entity.last_updated.isoformat() if entity.last_updated else now.isoformat()
+                    "last_changed": entity.last_changed.isoformat() if hasattr(entity.last_changed, "isoformat") else str(entity.last_changed or now.isoformat()),
+                    "last_updated": entity.last_updated.isoformat() if hasattr(entity.last_updated, "isoformat") else str(entity.last_updated or now.isoformat())
                 }
                 entity.user_id = user_id
                 if device_id is not None:
@@ -170,8 +193,8 @@ class StateService:
             "entity_id": entity.entity_id,
             "state": entity.state,
             "attributes": entity.attributes,
-            "last_changed": entity.last_changed.isoformat(),
-            "last_updated": entity.last_updated.isoformat()
+            "last_changed": entity.last_changed.isoformat() if hasattr(entity.last_changed, "isoformat") else str(entity.last_changed or now.isoformat()),
+            "last_updated": entity.last_updated.isoformat() if hasattr(entity.last_updated, "isoformat") else str(entity.last_updated or now.isoformat())
         }
 
         # Fire state_changed event

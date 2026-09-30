@@ -210,8 +210,8 @@ async def handle_command(session: Any, cmd_id: int, cmd_type: str, msg: Dict[str
                     "entity_id": e.entity_id,
                     "state": e.state,
                     "attributes": e.attributes,
-                    "last_changed": e.last_changed.isoformat(),
-                    "last_updated": e.last_updated.isoformat(),
+                    "last_changed": e.last_changed.isoformat() if hasattr(e.last_changed, "isoformat") else str(e.last_changed),
+                    "last_updated": e.last_updated.isoformat() if hasattr(e.last_updated, "isoformat") else str(e.last_updated),
                     "context": {"id": f"ctx_{e.entity_id}", "user_id": str(user_id)}
                 }
                 for e in entities
