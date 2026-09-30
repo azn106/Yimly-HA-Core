@@ -1855,9 +1855,9 @@ app.get("/api/circles/:id/members", authenticateToken, (req: AuthRequest, res) =
         const haLoc = nodeHAClient.getEntityLocation(assignedEntityId);
         if (haLoc) devices.push(haLoc);
       } else {
-        // Look in local entity states — REQUIRED: must belong to the linked user!
+        // Look in local entity states — REQUIRED: must belong to the linked user! If unlinked (linkedUser is null), must belong to no user.
         const localEntity = db.entity_states.find(
-          (e) => e.entity_id === assignedEntityId && (linkedUser ? e.user_id === linkedUser.id : true)
+          (e) => e.entity_id === assignedEntityId && (linkedUser ? e.user_id === linkedUser.id : (e.user_id === null || e.user_id === undefined))
         );
         if (localEntity && localEntity.latitude != null && localEntity.longitude != null) {
           devices.push({
@@ -1931,6 +1931,15 @@ app.post("/api/circles/:id/members", authenticateToken, (req: AuthRequest, res) 
     return res.status(422).json({ detail: "Display name is required" });
   }
 
+  const cleanEntity = assigned_entity_id ? String(assigned_entity_id).trim() : null;
+  if (cleanEntity) {
+    // Validate that assigned_entity_id doesn't belong to any other user since this is an unlinked member (user_id is null)
+    const belongsToOtherUser = db.entity_states.some((e) => e.entity_id === cleanEntity && e.user_id != null);
+    if (belongsToOtherUser) {
+      return res.status(400).json({ detail: "Invalid assigned_entity_id: entity belongs to another user" });
+    }
+  }
+
   const newMemberId = Date.now() + Math.floor(Math.random() * 1000);
   const newMember: CircleMemberData = {
     id: newMemberId,
@@ -1939,7 +1948,7 @@ app.post("/api/circles/:id/members", authenticateToken, (req: AuthRequest, res) 
     display_name: String(display_name).trim(),
     avatar_color: avatar_color || "#FF9AA2",
     profile_picture_url: profile_picture_url || null,
-    assigned_entity_id: assigned_entity_id ? String(assigned_entity_id).trim() : null,
+    assigned_entity_id: cleanEntity,
     created_at: new Date().toISOString()
   };
 
@@ -1953,7 +1962,9 @@ app.post("/api/circles/:id/members", authenticateToken, (req: AuthRequest, res) 
       const loc = nodeHAClient.getEntityLocation(newMember.assigned_entity_id);
       if (loc) devices.push(loc);
     } else {
-      const localEntity = db.entity_states.find((e) => e.entity_id === newMember.assigned_entity_id);
+      const localEntity = db.entity_states.find(
+        (e) => e.entity_id === newMember.assigned_entity_id && (e.user_id === null || e.user_id === undefined)
+      );
       if (localEntity && localEntity.latitude != null && localEntity.longitude != null) {
         devices.push({
           entity_id: localEntity.entity_id,
@@ -2010,11 +2021,19 @@ app.put("/api/circles/:id/members/:memberId", authenticateToken, (req: AuthReque
   }
   if (assigned_entity_id !== undefined) {
     const cleanEntity = assigned_entity_id ? String(assigned_entity_id).trim() : null;
-    if (cleanEntity && cm.user_id) {
-      // Validate that assigned_entity_id actually belongs to this user
-      const isOwned = db.entity_states.some((e) => e.entity_id === cleanEntity && e.user_id === cm.user_id);
-      if (!isOwned) {
-        return res.status(400).json({ detail: "Invalid assigned_entity_id: entity does not belong to this user" });
+    if (cleanEntity) {
+      if (cm.user_id) {
+        // Validate that assigned_entity_id actually belongs to this user
+        const isOwned = db.entity_states.some((e) => e.entity_id === cleanEntity && e.user_id === cm.user_id);
+        if (!isOwned) {
+          return res.status(400).json({ detail: "Invalid assigned_entity_id: entity does not belong to this user" });
+        }
+      } else {
+        // Validate that assigned_entity_id doesn't belong to any other user since this is an unlinked member
+        const belongsToOtherUser = db.entity_states.some((e) => e.entity_id === cleanEntity && e.user_id != null);
+        if (belongsToOtherUser) {
+          return res.status(400).json({ detail: "Invalid assigned_entity_id: entity belongs to another user" });
+        }
       }
     }
     cm.assigned_entity_id = cleanEntity;
@@ -2039,7 +2058,7 @@ app.put("/api/circles/:id/members/:memberId", authenticateToken, (req: AuthReque
       if (loc) devices.push(loc);
     } else {
       const localEntity = db.entity_states.find(
-        (e) => e.entity_id === cm.assigned_entity_id && (cm.user_id ? e.user_id === cm.user_id : true)
+        (e) => e.entity_id === cm.assigned_entity_id && (cm.user_id ? e.user_id === cm.user_id : (e.user_id === null || e.user_id === undefined))
       );
       if (localEntity && localEntity.latitude != null && localEntity.longitude != null) {
         devices.push({
@@ -2103,9 +2122,9 @@ app.get(["/api/ha/devices", "/api/devices/available"], authenticateToken, (req: 
     return res.json(discovered);
   }
 
-  // Fallback to local discovered entities in dev/preview
+  // Fallback to local discovered entities in dev/preview — REQUIRED: must belong to the authenticated user!
   const localEntities = db.entity_states.filter(
-    (e) => e.domain === "device_tracker" || e.entity_id.startsWith("device_tracker.")
+    (e) => (e.domain === "device_tracker" || e.entity_id.startsWith("device_tracker.")) && e.user_id === req.user!.id
   );
   const list = localEntities.map((e) => ({
     entity_id: e.entity_id,

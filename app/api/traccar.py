@@ -74,7 +74,7 @@ async def get_traccar_config(
 
     entity_name = slugify(user.username) or f"device_{device.id}"
     entity_id = f"device_tracker.{entity_name}"
-    stmt_entity = select(EntityState).where(EntityState.entity_id == entity_id)
+    stmt_entity = select(EntityState).where(EntityState.entity_id == entity_id, EntityState.user_id == user.id)
     res_entity = await db.execute(stmt_entity)
     entity = res_entity.scalar_one_or_none()
 

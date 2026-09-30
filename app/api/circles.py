@@ -293,16 +293,19 @@ async def list_circle_members(
                     devices_loc.append(loc)
 
         # 2. If an assigned entity ID is specified and not yet in devices_loc, resolve it from local EntityState
-        # REQUIREMENT: Must belong to the linked user!
+        # REQUIREMENT: Must belong to the linked user! If unlinked, must belong to no user!
         target_user_id = linked_user.id if linked_user else None
-        if assigned_entity_id and target_user_id:
+        if assigned_entity_id:
             already_present = any(d.entity_id == assigned_entity_id for d in devices_loc)
             if not already_present:
                 stmt_assigned = select(EntityState).where(
                     EntityState.entity_id == assigned_entity_id,
-                    EntityState.user_id == target_user_id,
                     EntityState.domain == "device_tracker"
                 )
+                if target_user_id is not None:
+                    stmt_assigned = stmt_assigned.where(EntityState.user_id == target_user_id)
+                else:
+                    stmt_assigned = stmt_assigned.where(EntityState.user_id.is_(None))
                 res_assigned = await db.execute(stmt_assigned)
                 dt_assigned = res_assigned.scalar_one_or_none()
                 if dt_assigned:
@@ -360,13 +363,26 @@ async def create_circle_member(
     if not circle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Circle not found.")
 
+    clean_entity = member_in.assigned_entity_id.strip() if member_in.assigned_entity_id else None
+    if clean_entity:
+        stmt_check = select(EntityState).where(
+            EntityState.entity_id == clean_entity,
+            EntityState.user_id.isnot(None)
+        )
+        res_check = await db.execute(stmt_check)
+        if res_check.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid assigned_entity_id: entity belongs to another user."
+            )
+
     new_member = CircleMember(
         circle_id=circle_id,
         user_id=None,
         display_name=member_in.display_name.strip(),
         avatar_color=member_in.avatar_color,
         profile_picture_url=member_in.profile_picture_url,
-        assigned_entity_id=member_in.assigned_entity_id.strip() if member_in.assigned_entity_id else None
+        assigned_entity_id=clean_entity
     )
     db.add(new_member)
     await db.commit()
@@ -377,7 +393,8 @@ async def create_circle_member(
     if new_member.assigned_entity_id:
         stmt_dt = select(EntityState).where(
             EntityState.entity_id == new_member.assigned_entity_id,
-            EntityState.domain == "device_tracker"
+            EntityState.domain == "device_tracker",
+            EntityState.user_id.is_(None)
         )
         res_dt = await db.execute(stmt_dt)
         dt = res_dt.scalar_one_or_none()
@@ -423,17 +440,29 @@ async def update_circle_member(
         member.profile_picture_url = member_in.profile_picture_url
     if member_in.assigned_entity_id is not None:
         clean_entity = member_in.assigned_entity_id.strip()
-        if clean_entity and member.user_id:
-            stmt_check = select(EntityState).where(
-                EntityState.entity_id == clean_entity,
-                EntityState.user_id == member.user_id
-            )
-            res_check = await db.execute(stmt_check)
-            if not res_check.scalar_one_or_none():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid assigned_entity_id: entity does not belong to this user."
+        if clean_entity:
+            if member.user_id:
+                stmt_check = select(EntityState).where(
+                    EntityState.entity_id == clean_entity,
+                    EntityState.user_id == member.user_id
                 )
+                res_check = await db.execute(stmt_check)
+                if not res_check.scalar_one_or_none():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid assigned_entity_id: entity does not belong to this user."
+                    )
+            else:
+                stmt_check = select(EntityState).where(
+                    EntityState.entity_id == clean_entity,
+                    EntityState.user_id.isnot(None)
+                )
+                res_check = await db.execute(stmt_check)
+                if res_check.scalar_one_or_none():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid assigned_entity_id: entity belongs to another user."
+                    )
         member.assigned_entity_id = clean_entity if clean_entity else None
 
     # If linked to a user and this user is updating their own member profile, sync user table
@@ -457,6 +486,8 @@ async def update_circle_member(
         )
         if member.user_id:
             stmt_dt = stmt_dt.where(EntityState.user_id == member.user_id)
+        else:
+            stmt_dt = stmt_dt.where(EntityState.user_id.is_(None))
         res_dt = await db.execute(stmt_dt)
         dt = res_dt.scalar_one_or_none()
         if dt:
@@ -517,7 +548,8 @@ async def get_available_ha_devices(
     Used by the frontend to populate the device assignment dropdown.
     """
     stmt = select(EntityState).where(
-        EntityState.domain == "device_tracker"
+        EntityState.domain == "device_tracker",
+        EntityState.user_id == user.id
     )
     res = await db.execute(stmt)
     entities = res.scalars().all()

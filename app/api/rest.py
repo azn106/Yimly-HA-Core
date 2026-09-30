@@ -348,7 +348,8 @@ async def api_get_ha_devices(
     db: AsyncSession = Depends(get_db)
 ):
     stmt = select(EntityState).where(
-        EntityState.domain == "device_tracker"
+        EntityState.domain == "device_tracker",
+        EntityState.user_id == user.id
     )
     res = await db.execute(stmt)
     entities = res.scalars().all()
