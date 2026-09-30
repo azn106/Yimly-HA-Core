@@ -740,96 +740,9 @@ export default function App() {
             />
           </div>
 
-          {/* 2. FLOATING NAVIGATION DOCK (DESKTOP) */}
-          <nav className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-white/85 backdrop-blur-2xl p-2 rounded-full border border-white/80 shadow-[0_16px_48px_rgba(0,0,0,0.12)] items-center gap-1.5 pointer-events-auto">
-            <button
-              onClick={() => setActiveTab("map")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black transition-all duration-150 cursor-pointer active:scale-95 ${
-                activeTab === "map"
-                  ? "bg-slate-900 text-white shadow-md"
-                  : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
-              }`}
-            >
-              <Home className="w-4 h-4" />
-              <span>Map</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("people")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black transition-all duration-150 cursor-pointer active:scale-95 ${
-                activeTab === "people"
-                  ? "bg-slate-900 text-white shadow-md"
-                  : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>People</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("places")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black transition-all duration-150 cursor-pointer active:scale-95 ${
-                activeTab === "places"
-                  ? "bg-slate-900 text-white shadow-md"
-                  : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>Places</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("alerts")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-black transition-all duration-150 cursor-pointer active:scale-95 relative ${
-                activeTab === "alerts"
-                  ? "bg-slate-900 text-white shadow-md"
-                  : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
-              }`}
-            >
-              <div className="relative">
-                <Bell className="w-4 h-4" />
-                {alerts.filter((a) => !a.read).length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white ring-1 ring-white">
-                    {alerts.filter((a) => !a.read).length}
-                  </span>
-                )}
-              </div>
-              <span>Alerts</span>
-            </button>
-
-            <div className="w-px h-6 bg-slate-200/80 my-auto mx-1" />
-
-            {/* Profile Avatar Pill (Settings & Account) */}
-            <div 
-              onClick={handleOpenSettings}
-              className={`w-8 h-8 text-white font-extrabold text-xs flex items-center justify-center cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95 overflow-hidden shrink-0 ${
-                activeTab === "settings"
-                  ? "ring-2 ring-slate-900 ring-offset-2 scale-105"
-                  : ""
-              }`}
-              style={{
-                backgroundColor: getAvatarColor(displayUser?.avatar_color || user?.avatar_color),
-                clipPath: "url(#squircle-clip-app)",
-                filter: `drop-shadow(0 2px 4px ${getAvatarColor(displayUser?.avatar_color || user?.avatar_color)}60)`
-              }}
-              title={`${displayUser?.display_name || user?.display_name} (Settings)`}
-            >
-              {(displayUser?.profile_picture_url || user?.profile_picture_url) ? (
-                <img
-                  src={displayUser?.profile_picture_url || user?.profile_picture_url || undefined}
-                  alt={displayUser?.display_name || user?.display_name}
-                  className="w-full h-full object-cover"
-                  style={{ clipPath: "url(#squircle-clip-app)" }}
-                />
-              ) : (
-                (displayUser?.display_name || user?.display_name || "U").charAt(0).toUpperCase()
-              )}
-            </div>
-          </nav>
-
-          {/* Top-Left Family Circle Title Pill (Mobile) */}
+          {/* Top-Left Family Circle Title Pill (Universal) */}
           {activeTab === "map" && (
-            <div className="md:hidden fixed top-[max(0.75rem,env(safe-area-inset-top))] left-0 z-30 pointer-events-auto">
+            <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] left-0 z-30 pointer-events-auto">
               <button
                 onClick={() => {
                   if (!selectedCircle) {
@@ -850,9 +763,9 @@ export default function App() {
             </div>
           )}
 
-          {/* Top-Right Settings Button (Mobile) */}
+          {/* Top-Right Settings Button (Universal) */}
           {activeTab === "map" && (
-            <div className="md:hidden fixed top-[max(0.75rem,env(safe-area-inset-top))] right-4 z-30 pointer-events-auto">
+            <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] right-4 z-30 pointer-events-auto">
               <button
                 onClick={handleOpenSettings}
                 className="w-10 h-10 bg-white/85 backdrop-blur-2xl rounded-full border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.08)] flex items-center justify-center text-slate-700 hover:text-indigo-600 active:scale-95 transition-all duration-150 cursor-pointer"
@@ -863,8 +776,8 @@ export default function App() {
             </div>
           )}
 
-          {/* FLOATING NAVIGATION DOCK (MOBILE) */}
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
+          {/* FLOATING MEMBER NAVBAR DOCK (UNIVERSAL MASTER UI) */}
+          <nav className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none">
             {/* White/Frosted background card: straight square top edge, rising ~1/4 up the 48px member icons */}
             <div className="absolute inset-x-0 bottom-0 top-[44px] bg-white/85 backdrop-blur-2xl rounded-none border-t border-white/80 shadow-[0_-8px_30px_rgb(0,0,0,0.08)] pointer-events-auto" />
 
