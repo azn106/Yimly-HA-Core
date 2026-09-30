@@ -2666,6 +2666,28 @@ const handleTraccarPayload = (req: Request, res: Response) => {
   const newTime = fixDate.getTime();
   const isNewerFix = !hasExistingCoordinates || newTime >= existingTime;
 
+  // [TEMPORARY DIAGNOSTIC] Forensic trace logging for Traccar POST identity mapping
+  const maskToken = (t: any): string => {
+    if (!t || typeof t !== "string") return "[none]";
+    if (t.length <= 8) return "***";
+    return `${t.slice(0, 4)}...${t.slice(-4)}`;
+  };
+  const payloadDeviceId = rawId || "[omitted]";
+  const usedFallbackIdentity = !rawId;
+  const wasDeviceReused = Boolean(matchingDevice && matchingDevice.id);
+
+  console.log(`[TEMPORARY DIAGNOSTIC] --- Traccar POST Location Ingestion Trace ---`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 1. Token (masked): ${maskToken(token)} -> Resolved Yimly User ID: ${user.id}, Username: '${user.username}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 2. Traccar Payload Device Identifier: '${payloadDeviceId}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 3. Resolved Yimly Device Record: DB ID=${matchingDevice.id}, device_id='${matchingDevice.device_id}', device_name='${matchingDevice.device_name}', app_id='${matchingDevice.app_id}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 4. Resolved Entity ID: '${entityId}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 5. Current-State Update Target: User ID=${user.id}, Device ID=${matchingDevice.id}, Entity ID='${entityId}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 6. History Point Writer Target: User ID=${user.id}, Device ID=${matchingDevice.id}, Entity ID='${entityId}'`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 7. Traccar GPS Payload: Lat=${lat}, Lon=${lon}, Fix Timestamp='${fixIso}' (isNewerFix=${isNewerFix})`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 8. Device Record Adopted/Reused: ${wasDeviceReused ? `YES (DB Device ID ${matchingDevice.id})` : "NO (New Device)"}`);
+  console.log(`[TEMPORARY DIAGNOSTIC] 9. Fallback Identity Logic Used: ${usedFallbackIdentity ? "YES (Payload ID omitted, fell back to token user.username)" : "NO (Payload ID explicitly verified against token user.username)"}`);
+  console.log(`[TEMPORARY DIAGNOSTIC] --------------------------------------------------`);
+
   if (lat !== null && lon !== null) {
     // 1. Record in LocationHistory with the actual Traccar fix timestamp
     if (user.save_location_history !== false) {

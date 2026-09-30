@@ -253,6 +253,30 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
     existing_time = existing_entity.last_updated if (existing_entity and existing_entity.last_updated) else datetime.min.replace(tzinfo=timezone.utc)
     is_newer_fix = fix_dt >= existing_time
 
+    # [TEMPORARY DIAGNOSTIC] Forensic trace logging for Traccar POST identity mapping
+    def _mask_token(t: Optional[str]) -> str:
+        if not t:
+            return "[none]"
+        if len(t) <= 8:
+            return "***"
+        return f"{t[:4]}...{t[-4:]}"
+
+    payload_device_id = str(params.get("id") or params.get("deviceid") or params.get("uniqueId") or params.get("identifier") or "[omitted]").strip()
+    used_fallback_identity = (payload_device_id == "[omitted]")
+    was_device_reused = bool(device and device.id)
+
+    logger.info("[TEMPORARY DIAGNOSTIC] --- Traccar POST Location Ingestion Trace ---")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 1. Token (masked): {_mask_token(token)} -> Resolved Yimly User ID: {user.id}, Username: '{user.username}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 2. Traccar Payload Device Identifier: '{payload_device_id}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 3. Resolved Yimly Device Record: DB ID={device.id}, device_id='{device.device_id}', device_name='{device.device_name}', app_id='{device.app_id}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 4. Resolved Entity ID: '{entity_id}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 5. Current-State Update Target: User ID={user.id}, Device ID={device.id}, Entity ID='{entity_id}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 6. History Point Writer Target: User ID={user.id}, Device ID={device.id}, Entity ID='{entity_id}'")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 7. Traccar GPS Payload: Lat={lat}, Lon={lon}, Fix Timestamp='{fix_dt.isoformat()}' (is_newer_fix={is_newer_fix})")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 8. Device Record Adopted/Reused: {'YES (DB Device ID ' + str(device.id) + ')' if was_device_reused else 'NO (New Device)'}")
+    logger.info(f"[TEMPORARY DIAGNOSTIC] 9. Fallback Identity Logic Used: {'YES (Payload ID omitted, fell back to token user.username)' if used_fallback_identity else 'NO (Payload ID explicitly verified against token user.username)'}")
+    logger.info("[TEMPORARY DIAGNOSTIC] --------------------------------------------------")
+
     if lat is not None and lon is not None:
         # Use TelemetryService
         await TelemetryService.process_location_update(db, device, loc_data)
