@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -16,6 +17,7 @@ class LocationUpdateData(BaseModel):
     vertical_accuracy: Optional[float] = Field(default=None, description="Vertical accuracy in meters")
     location_name: Optional[str] = Field(default=None, description="Optional HA zone/location name")
     zone: Optional[str] = Field(default=None, description="Optional HA zone name alias")
+    timestamp: Optional[datetime] = Field(default=None, description="The GPS/fix timestamp")
 
     class Config:
         extra = "allow"

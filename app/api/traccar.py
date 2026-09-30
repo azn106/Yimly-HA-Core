@@ -231,7 +231,7 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
     # Alarm
     alarm = str(params.get("alarm")).strip() if params.get("alarm") else None
 
-    # Construct LocationUpdateData
+    # Construct LocationUpdateData with the parsed fix_dt timestamp
     loc_data = LocationUpdateData(
         latitude=lat,
         longitude=lon,
@@ -240,7 +240,8 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
         speed=speed_mps,
         bearing=bearing,
         battery=battery,
-        trigger=alarm or "traccar"
+        trigger=alarm or "traccar",
+        timestamp=fix_dt
     )
 
     # Process location update through existing pipeline
@@ -278,12 +279,8 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
     logger.info("[TEMPORARY DIAGNOSTIC] --------------------------------------------------")
 
     if lat is not None and lon is not None:
-        # Use TelemetryService
+        # Use TelemetryService (authoritative chronological freshness is handled inside StateService)
         await TelemetryService.process_location_update(db, device, loc_data)
-        # Ensure timestamp reflects Traccar fix timestamp if newer
-        if existing_entity and is_newer_fix:
-            existing_entity.last_updated = fix_dt
-            await db.commit()
     else:
         # Heartbeat without coordinates: update last_seen_at without destroying last valid coords
         now = datetime.now(timezone.utc)

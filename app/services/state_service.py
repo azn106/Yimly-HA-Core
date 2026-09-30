@@ -30,16 +30,33 @@ class StateService:
         attributes: Dict[str, Any],
         device_id: Optional[int] = None,
         latitude: Optional[float] = None,
-        longitude: Optional[float] = None
+        longitude: Optional[float] = None,
+        timestamp: Optional[datetime] = None
     ) -> EntityState:
         domain = entity_id.split(".", 1)[0] if "." in entity_id else "sensor"
         now = datetime.now(timezone.utc)
+        target_timestamp = timestamp or now
 
         stmt = select(EntityState).where(
             EntityState.entity_id == entity_id
         )
         result = await db.execute(stmt)
         entity = result.scalar_one_or_none()
+
+        # Enforce central architectural freshness check to prevent older location points
+        # from overwriting current EntityState coordinates
+        if entity and entity.last_updated:
+            entity_updated = entity.last_updated
+            t_ts = target_timestamp
+            # Timezone safety: align naive vs aware datetimes
+            if entity_updated.tzinfo is None and t_ts.tzinfo is not None:
+                t_ts = t_ts.replace(tzinfo=None)
+            elif entity_updated.tzinfo is not None and t_ts.tzinfo is None:
+                entity_updated = entity_updated.replace(tzinfo=None)
+
+            if t_ts < entity_updated:
+                # Reject mutation from an older GPS fix. Retain existing state and skip broadcast.
+                return entity
 
         old_state = None
         if entity:
@@ -55,8 +72,8 @@ class StateService:
                 entity.device_id = device_id
             entity.domain = domain
             if entity.state != str(state):
-                entity.last_changed = now
-            entity.last_updated = now
+                entity.last_changed = target_timestamp
+            entity.last_updated = target_timestamp
             entity.state = str(state)
             entity.attributes = attributes
             if latitude is not None:
@@ -73,8 +90,8 @@ class StateService:
                 attributes=attributes,
                 latitude=latitude,
                 longitude=longitude,
-                last_changed=now,
-                last_updated=now
+                last_changed=target_timestamp,
+                last_updated=target_timestamp
             )
             db.add(entity)
 
@@ -91,6 +108,17 @@ class StateService:
             result = await db.execute(stmt)
             entity = result.scalar_one_or_none()
             if entity:
+                entity_updated = entity.last_updated
+                t_ts = target_timestamp
+                if entity_updated:
+                    if entity_updated.tzinfo is None and t_ts.tzinfo is not None:
+                        t_ts = t_ts.replace(tzinfo=None)
+                    elif entity_updated.tzinfo is not None and t_ts.tzinfo is None:
+                        entity_updated = entity_updated.replace(tzinfo=None)
+
+                    if t_ts < entity_updated:
+                        return entity
+
                 old_state = {
                     "entity_id": entity.entity_id,
                     "state": entity.state,
@@ -103,8 +131,8 @@ class StateService:
                     entity.device_id = device_id
                 entity.domain = domain
                 if entity.state != str(state):
-                    entity.last_changed = now
-                entity.last_updated = now
+                    entity.last_changed = target_timestamp
+                entity.last_updated = target_timestamp
                 entity.state = str(state)
                 entity.attributes = attributes
                 if latitude is not None:
@@ -134,8 +162,8 @@ class StateService:
                         attributes=attributes,
                         latitude=latitude,
                         longitude=longitude,
-                        last_changed=now,
-                        last_updated=now
+                        last_changed=target_timestamp,
+                        last_updated=target_timestamp
                     )
 
         new_state = {

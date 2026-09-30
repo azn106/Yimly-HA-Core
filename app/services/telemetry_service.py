@@ -114,7 +114,7 @@ class TelemetryService:
                 altitude=data.altitude,
                 speed=data.speed,
                 bearing=data.bearing,
-                timestamp=now,
+                timestamp=data.timestamp or now,
                 trigger=data.trigger
             )
             db.add(loc_history)
@@ -186,7 +186,8 @@ class TelemetryService:
             attributes=attributes,
             device_id=device.id,
             latitude=data.latitude,
-            longitude=data.longitude
+            longitude=data.longitude,
+            timestamp=data.timestamp
         )
 
         # Update last_seen_at for the device
