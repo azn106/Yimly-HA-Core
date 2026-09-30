@@ -2384,30 +2384,43 @@ export function ensureTraccarDeviceForUser(userId: number): DeviceData {
   );
 
   if (!device) {
-    // Generate unguessable 32-character hex token
-    const token = crypto.randomBytes(16).toString("hex");
-    const deviceId = user.username;
-    const deviceName = `${user.display_name || user.username}'s Phone`;
+    // Check if there is an existing legacy Companion device for this user that can be safely upgraded/associated
+    const legacyDevice = db.devices.find((d) => d.user_id === userId && !d.app_id);
+    if (legacyDevice) {
+      legacyDevice.app_id = "org.traccar.client";
+      legacyDevice.app_name = "Traccar Client";
+      legacyDevice.manufacturer = "Traccar";
+      legacyDevice.model = "Traccar Client";
+      legacyDevice.device_id = user.username;
+      legacyDevice.device_name = legacyDevice.device_name || `${user.display_name || user.username}'s Phone`;
+      legacyDevice.webhook_id = legacyDevice.webhook_id || crypto.randomBytes(16).toString("hex");
+      device = legacyDevice;
+    } else {
+      // Generate unguessable 32-character hex token
+      const token = crypto.randomBytes(16).toString("hex");
+      const deviceId = user.username;
+      const deviceName = `${user.display_name || user.username}'s Phone`;
 
-    device = {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      user_id: userId,
-      device_id: deviceId,
-      app_id: "org.traccar.client",
-      app_name: "Traccar Client",
-      device_name: deviceName,
-      manufacturer: "Traccar",
-      model: "Traccar Client",
-      os_name: "Mobile",
-      os_version: "10.0",
-      webhook_id: token,
-      created_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-      first_telemetry_received: false,
-      low_battery_alert_triggered: false,
-      device_offline_alert_triggered: false
-    };
-    db.devices.push(device);
+      device = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        user_id: userId,
+        device_id: deviceId,
+        app_id: "org.traccar.client",
+        app_name: "Traccar Client",
+        device_name: deviceName,
+        manufacturer: "Traccar",
+        model: "Traccar Client",
+        os_name: "Mobile",
+        os_version: "10.0",
+        webhook_id: token,
+        created_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+        first_telemetry_received: false,
+        low_battery_alert_triggered: false,
+        device_offline_alert_triggered: false
+      };
+      db.devices.push(device);
+    }
 
     // Also ensure the corresponding EntityState exists
     const entityId = `device_tracker.${user.username.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
@@ -2420,7 +2433,7 @@ export function ensureTraccarDeviceForUser(userId: number): DeviceData {
         domain: "device_tracker",
         state: "not_home",
         attributes: {
-          friendly_name: deviceName,
+          friendly_name: device.device_name,
           source_type: "gps",
           platform: "Traccar",
           map_icon: "Phone",
@@ -2436,7 +2449,10 @@ export function ensureTraccarDeviceForUser(userId: number): DeviceData {
     }
     saveDB(db);
   } else {
-    // Make sure device_id is synced to username
+    // Make sure device fields and device_id are synced to username
+    device.app_id = "org.traccar.client";
+    device.app_name = "Traccar Client";
+    device.manufacturer = "Traccar";
     if (device.device_id !== user.username) {
       device.device_id = user.username;
       saveDB(db);
@@ -2645,9 +2661,10 @@ const handleTraccarPayload = (req: Request, res: Response) => {
   // 1. LocationHistory must retain the actual Traccar fix timestamp.
   // 2. An old buffered location must NOT move the current map marker backwards.
   // 3. Only update the current EntityState location when the incoming fix is newer than the currently stored location timestamp.
-  const existingTime = existingEntity && existingEntity.last_updated ? new Date(existingEntity.last_updated).getTime() : 0;
+  const hasExistingCoordinates = existingEntity && existingEntity.latitude !== null && existingEntity.longitude !== null;
+  const existingTime = hasExistingCoordinates && existingEntity.last_updated ? new Date(existingEntity.last_updated).getTime() : 0;
   const newTime = fixDate.getTime();
-  const isNewerFix = newTime >= existingTime;
+  const isNewerFix = !hasExistingCoordinates || newTime >= existingTime;
 
   if (lat !== null && lon !== null) {
     // 1. Record in LocationHistory with the actual Traccar fix timestamp
@@ -3231,41 +3248,10 @@ function checkOfflineDevicesPreview(): void {
   }
 }
 
-// Home Assistant Companion App Device Registration Endpoint
+// Home Assistant Companion App Device Registration Endpoint (Disabled as GPS Location Source)
 app.post("/api/mobile_app/registrations", (req, res) => {
-  db = loadDB();
-  db.devices = db.devices || [];
-  const webhookId = crypto.randomBytes(16).toString("hex");
-
-  let authUserId = 1;
-  const authHeader = req.headers["authorization"];
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    try {
-      const decoded: any = jwt.verify(authHeader.split(" ")[1], JWT_SECRET);
-      if (decoded && decoded.sub) {
-        authUserId = Number(decoded.sub);
-      }
-    } catch {}
-  } else if (db.users[0]) {
-    authUserId = db.users[0].id;
-  }
-
-  const deviceData = {
-    id: Date.now(),
-    user_id: authUserId,
-    device_id: req.body.device_id || "device_unknown",
-    device_name: req.body.device_name || "Companion Phone",
-    app_version: req.body.app_version || "1.0.0",
-    webhook_id: webhookId
-  };
-  db.devices.push(deviceData);
-  saveDB(db);
-
-  return res.status(201).json({
-    webhook_id: webhookId,
-    secret: null,
-    cloudhook_url: null,
-    remote_ui_url: null
+  return res.status(410).json({
+    detail: "Home Assistant Companion device registration is disabled. Please configure the official Traccar Client as your GPS location source."
   });
 });
 
@@ -3291,7 +3277,14 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
     return res.status(400).json({ detail: "Payload must contain 'type' field." });
   }
 
-  // 1. get_zones
+  // 1. Explicitly reject and disable Companion Location Ingestion
+  if (type === "update_location" || data?.location || data?.gps || (req.body && (req.body.latitude !== undefined || req.body.longitude !== undefined))) {
+    return res.status(410).json({
+      detail: "Home Assistant Companion location ingestion is disabled. Please configure the official Traccar Client as your GPS location source (/api/traccar/:token)."
+    });
+  }
+
+  // 2. get_zones
   if (type === "get_zones") {
     const places = db.places || [];
     const zones = places.map((p) => ({
@@ -3308,7 +3301,7 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
     return res.json(zones);
   }
 
-  // 2. get_config
+  // 3. get_config
   if (type === "get_config") {
     return res.json({
       latitude: 0.0,
@@ -3322,19 +3315,19 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
       },
       location_name: "Home",
       time_zone: "UTC",
-      components: ["mobile_app", "webhook", "zone", "device_tracker"],
+      components: ["webhook", "zone"],
       version: "2024.1.0",
       theme_color: "#03a9f4",
       entities: {}
     });
   }
 
-  // 3. register_sensor
+  // 4. register_sensor
   if (type === "register_sensor") {
     return res.status(201).json({ success: true });
   }
 
-  // 4. update_sensor_states
+  // 5. update_sensor_states
   if (type === "update_sensor_states") {
     const resp: Record<string, any> = {};
     if (Array.isArray(data)) {
@@ -3345,7 +3338,7 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
     return res.json(resp);
   }
 
-  // 5. update_registration
+  // 6. update_registration
   if (type === "update_registration") {
     return res.json({
       app_version: data?.app_version || "1.0.0",
@@ -3357,104 +3350,7 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
     });
   }
 
-  // Handle Home Assistant Location Update Payload
-  if (type === "update_location" || data?.location || data?.gps || (req.body.latitude && req.body.longitude)) {
-    const lat = data?.gps ? data.gps[0] : (data?.location?.latitude ?? data?.latitude ?? req.body.latitude);
-    const lon = data?.gps ? data.gps[1] : (data?.location?.longitude ?? data?.longitude ?? req.body.longitude);
-    const battery = data?.location?.battery ?? data?.battery ?? req.body.battery ?? 100;
-    const accuracy = data?.location?.gps_accuracy ?? data?.gps_accuracy ?? data?.accuracy ?? req.body.gps_accuracy ?? 5;
-    const userId = req.body.user_id || (matchingDevice ? matchingDevice.user_id : (db.users[0] ? db.users[0].id : 1));
-    const entityId = req.body.entity_id || data?.entity_id || (matchingDevice ? `device_tracker.${matchingDevice.device_id}` : "device_tracker.mobile_app");
-    const targetUser = db.users.find((u) => u.id === userId);
-
-    if (lat != null && lon != null) {
-      const now = new Date().toISOString();
-      const existingIdx = db.entity_states.findIndex((e) => e.entity_id === entityId);
-      
-      const updatedState: EntityStateData = {
-        entity_id: entityId,
-        user_id: userId,
-        domain: "device_tracker",
-        state: "not_home",
-        attributes: {
-          friendly_name: req.body.device_name || (matchingDevice ? matchingDevice.device_name : (existingIdx !== -1 ? db.entity_states[existingIdx].attributes?.friendly_name : "Companion Phone")),
-          battery_level: battery,
-          gps_accuracy: accuracy,
-          platform: existingIdx !== -1 ? db.entity_states[existingIdx].attributes?.platform || "Android" : "Android",
-          location_visibility: existingIdx !== -1 ? db.entity_states[existingIdx].attributes?.location_visibility || "family" : "family",
-          map_icon: existingIdx !== -1 ? db.entity_states[existingIdx].attributes?.map_icon || "Phone" : "Phone"
-        },
-        latitude: Number(lat),
-        longitude: Number(lon),
-        last_updated: now
-      };
-
-      if (existingIdx !== -1) {
-        db.entity_states[existingIdx] = updatedState;
-      } else {
-        db.entity_states.push(updatedState);
-      }
-
-      // Record location history only if user has enabled location history
-      if (!targetUser || targetUser.save_location_history !== false) {
-        db.location_history.push({
-          id: crypto.randomBytes(8).toString("hex"),
-          entity_id: entityId,
-          user_id: userId,
-          latitude: Number(lat),
-          longitude: Number(lon),
-          battery_level: battery,
-          accuracy,
-          timestamp: now
-        });
-      }
-      cleanupHistoryForUser(db, userId, targetUser?.history_retention);
-
-      saveDB(db);
-
-      try {
-        evaluateGeofencingPreview(userId, entityId, Number(lat), Number(lon));
-      } catch (err) {
-        console.error("Error in evaluateGeofencingPreview:", err);
-      }
-
-      try {
-        evaluateLowBatteryPreview(userId, entityId, battery);
-      } catch (err) {
-        console.error("Error in evaluateLowBatteryPreview:", err);
-      }
-
-      try {
-        updateDeviceOfflinePreview(userId, entityId);
-      } catch (err) {
-        console.error("Error in updateDeviceOfflinePreview:", err);
-      }
-
-      // Broadcast update over WebSocket
-      broadcastStateUpdate({
-        event_type: "state_changed",
-        data: {
-          entity_id: entityId,
-          new_state: updatedState
-        }
-      });
-
-      return res.json({
-        success: true,
-        message: "Real location telemetry received",
-        diagnostics: {
-          userId,
-          entityId,
-          lat: Number(lat),
-          lon: Number(lon),
-          circles: db.circle_members.filter((m) => m.user_id === userId).map((m) => m.circle_id),
-          geofence_states: db.geofence_states
-        }
-      });
-    }
-  }
-
-  // Registration or general HA response
+  // General HA response
   res.json({
     id: crypto.randomBytes(8).toString("hex"),
     webhook_id: req.params.webhook_id || "default_webhook",

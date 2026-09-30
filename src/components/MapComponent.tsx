@@ -1406,6 +1406,15 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
     }
   }, [selectedMemberId, members, isHistoryOpen, activeRange, fetchMemberHistory, flyToMemberLocation, setSelectedMemberId]);
 
+  // Recenter map on the currently selected member's valid location without changing selection
+  const handleRecenterSelectedMember = useCallback(() => {
+    if (!selectedMember) return;
+    const dev = selectedMember.devices?.find(d => isValidCoordinate(d.latitude, d.longitude)) || selectedMember.devices?.[0];
+    if (!dev || !isValidCoordinate(dev.latitude, dev.longitude)) return;
+
+    flyToMemberLocation(selectedMember, isCardHidden, 800);
+  }, [selectedMember, flyToMemberLocation, isCardHidden]);
+
   useImperativeHandle(ref, () => ({
     focusMember: handleFocusMember
   }), [handleFocusMember]);
@@ -2786,7 +2795,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-                        No HA Companion App device linked to this account
+                        No GPS device linked to this account
                       </p>
                     )}
                   </div>
@@ -3006,7 +3015,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                       ) : (
                         <div className="py-6 px-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 text-center">
                           <p className="text-xs font-bold text-slate-600">
-                            No HA Companion App device linked to this account
+                            No GPS device linked to this account
                           </p>
                         </div>
                       )}
@@ -3091,12 +3100,13 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                           </button>
 
                           <button
-                            onClick={() => handleFocusMember(selectedMember)}
-                            className="py-2.5 px-1 bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-700 rounded-2xl text-[11px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-slate-100/40"
-                            title="Center on member"
-                            aria-label="Center on member"
+                            onClick={handleRecenterSelectedMember}
+                            disabled={!hasValidLocation}
+                            className="py-2.5 px-1 bg-slate-50 hover:bg-slate-100 active:scale-95 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 rounded-2xl text-[11px] font-bold transition flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-slate-100/40"
+                            title={hasValidLocation ? "Recenter on member's current location" : "Location unavailable to recenter"}
+                            aria-label="Recenter Selected Member"
                           >
-                            <Navigation className="w-4 h-4" />
+                            <Navigation className="w-4 h-4 text-indigo-600" />
                             <span className="truncate">Recenter</span>
                           </button>
 
@@ -3120,7 +3130,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                         <div className="space-y-3 pt-1">
                           <div className="py-3.5 px-4 rounded-2xl bg-white/40 border border-white/60 text-center">
                             <p className="text-xs sm:text-sm font-bold text-slate-700 leading-relaxed">
-                              No HA Companion App device linked to this account
+                              No GPS device linked to this account
                             </p>
                           </div>
 
@@ -3251,17 +3261,29 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                         </div>
                       )}
 
-                      {/* Action Buttons in Mobile Sheet (Get Directions & Ping Device) */}
-                      <div className="pt-1 flex items-center justify-center gap-2 px-1">
+                      {/* Action Buttons in Mobile Sheet (Recenter, Get Directions & Ping Device) */}
+                      <div className="pt-1 flex items-center justify-center gap-1.5 px-1">
+                        <button
+                          type="button"
+                          onClick={handleRecenterSelectedMember}
+                          disabled={!hasValidLocation}
+                          className="flex-1 py-2.5 px-2 bg-indigo-600 hover:bg-indigo-700 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                          title={hasValidLocation ? "Recenter map on selected member" : "Location unavailable to recenter"}
+                          aria-label="Recenter Selected Member"
+                        >
+                          <Navigation className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Recenter</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={handleGetDirections}
                           disabled={!hasValidLocation}
-                          className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          className="flex-1 py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
                           title={hasValidLocation ? "Get directions in Google Maps" : "Location unavailable for directions"}
                           aria-label="Get Directions in Google Maps"
                         >
-                          <Route className="w-4 h-4 shrink-0" />
+                          <Route className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate">Directions</span>
                         </button>
 
@@ -3269,12 +3291,12 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                           type="button"
                           onClick={handlePingDevice}
                           disabled={!hasLinkedDevice || pingLoading}
-                          className="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                          className="flex-1 py-2.5 px-2 bg-amber-500 hover:bg-amber-600 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
                           title="Ping device (plays sound via Home Assistant find_my event)"
                           aria-label="Ping Device"
                         >
-                          <Volume2 className={`w-4 h-4 shrink-0 ${pingLoading ? "animate-bounce" : ""}`} />
-                          <span className="truncate">{pingLoading ? "Pinging..." : "Ping Device"}</span>
+                          <Volume2 className={`w-3.5 h-3.5 shrink-0 ${pingLoading ? "animate-bounce" : ""}`} />
+                          <span className="truncate">{pingLoading ? "Pinging..." : "Ping"}</span>
                         </button>
                       </div>
 
@@ -3318,7 +3340,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                   ) : (
                     <div className="mt-4 p-4 rounded-2xl bg-white/40 border border-white/60 text-center">
                       <p className="text-xs font-bold text-slate-700 leading-relaxed">
-                        No HA Companion App device linked to this account
+                        No GPS device linked to this account
                       </p>
                     </div>
                   )}
@@ -3535,7 +3557,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
                   ) : (
                     <div className="py-6 px-4 rounded-2xl bg-slate-50/80 border border-slate-200/60 text-center">
                       <p className="text-xs font-bold text-slate-600">
-                        No HA Companion App devices connected
+                        No GPS devices connected
                       </p>
                     </div>
                   )}
@@ -3585,15 +3607,15 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
             </div>
             <h3 className="text-sm font-bold text-slate-800">No device locations available</h3>
             <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed font-semibold">
-              Locations will automatically appear when family members connect their Home Assistant Companion App and send real coordinates.
+              Locations will automatically appear when family members configure Traccar Client and send real coordinates.
             </p>
 
             <div className="mt-4 p-3.5 rounded-2xl bg-slate-50/70 border border-slate-100 text-left">
               <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Connection steps:</h4>
               <ul className="mt-2 space-y-1 text-[10px] text-slate-400 list-disc list-inside font-semibold">
-                <li>Install Home Assistant Companion App</li>
-                <li>Enter this bridge's URL address</li>
-                <li>Sign in to sync real location telemetry</li>
+                <li>Install Traccar Client app</li>
+                <li>Configure Server URL & Device ID (Settings → Devices)</li>
+                <li>Start tracking to stream location telemetry</li>
               </ul>
             </div>
           </div>

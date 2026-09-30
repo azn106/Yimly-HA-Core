@@ -2087,7 +2087,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Location Updates Frequency</h3>
                 <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  Interval for companion device location telemetry sync
+                  Interval for device location telemetry sync
                 </p>
               </div>
               <div className="relative min-w-[150px]">
@@ -2146,7 +2146,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Push Notifications</h3>
                 <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  Master toggle for system and companion app notifications
+                  Master toggle for system and mobile push notifications
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
