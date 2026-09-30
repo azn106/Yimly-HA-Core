@@ -122,22 +122,51 @@ async function runNativeSettingsTests() {
   }
   console.log("✓ Official 'config_screen/show' external-bus command successfully dispatched to native Companion App.");
 
-  // Test 4: Incoming config/get from Native App handshake
-  console.log("\n4. Testing Incoming 'config/get' query handling from Native App...");
+  // Test 4: Incoming config/get query handling from Native App & Response Envelope
+  console.log("\n4. Testing Incoming 'config/get' query handling & Response Envelope...");
   sentMessages = [];
   handleIncomingExternalBusMessage({
     type: "config/get",
     id: 55
   });
 
-  const responseMsg = sentMessages.find((m) => m.type === "config/get" && m.payload?.result?.ha_version);
+  const responseMsg = sentMessages.find((m) => m.id === 55);
   if (!responseMsg) {
     throw new Error("Expected response to incoming 'config/get' query");
   }
-  if (responseMsg.id !== 55) {
-    throw new Error(`Expected response to preserve query id 55, got: ${responseMsg.id}`);
+  if (responseMsg.type !== "result" || responseMsg.success !== true || !responseMsg.result?.ha_version) {
+    throw new Error(`Invalid response envelope for iOS ObjectMapper: ${JSON.stringify(responseMsg)}`);
   }
-  console.log("✓ Incoming 'config/get' query received and answered with instance metadata.");
+  console.log("✓ Incoming 'config/get' query received and answered with protocol-compliant envelope.");
+
+  // Test 5: iOS 2026.7.5 WebKit WKScriptMessageHandler Object Bridging
+  console.log("\n5. Testing iOS 2026.7.5 WebKit WKScriptMessageHandler Object Bridging...");
+  let iosWebkitReceivedObject: any = null;
+  (global as any).window.webkit = {
+    messageHandlers: {
+      externalBus: {
+        postMessage: (msgObj: any) => {
+          iosWebkitReceivedObject = msgObj;
+        }
+      }
+    }
+  };
+
+  notifyExternalBus("config/get", {
+    success: true,
+    result: {
+      ha_version: "2026.9.1",
+      location_name: "Yimly Home"
+    }
+  }, 88);
+
+  if (typeof iosWebkitReceivedObject !== "object" || iosWebkitReceivedObject === null) {
+    throw new Error(`Expected iOS WebKit postMessage to receive raw Object dictionary, got: ${typeof iosWebkitReceivedObject}`);
+  }
+  if (iosWebkitReceivedObject.id !== 88 || iosWebkitReceivedObject.type !== "result" || iosWebkitReceivedObject.success !== true) {
+    throw new Error(`iOS ObjectMapper target envelope mismatched: ${JSON.stringify(iosWebkitReceivedObject)}`);
+  }
+  console.log("✓ iOS 2026.7.5 WebKit postMessage receives native JS Object dictionary for Alamofire/ObjectMapper.");
 
   // Test 5: Outgoing requestExternalConfig() handshake
   console.log("\n5. Testing Outgoing requestExternalConfig() handshake...");

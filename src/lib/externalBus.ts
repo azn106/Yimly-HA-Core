@@ -49,11 +49,34 @@ export const notifyExternalBus = (type: string, payload?: any, id?: number) => {
     id: id !== undefined ? id : undefined
   });
 
-  const msg: any = { type };
-  if (payload !== undefined) msg.payload = payload;
-  if (id !== undefined) msg.id = id;
-  const msgStr = JSON.stringify(msg);
+  // Construct protocol-compliant Home Assistant External Bus message envelope
+  const msgObj: Record<string, any> = {};
 
+  if (id !== undefined && id !== null) {
+    msgObj.id = id;
+  }
+
+  if (payload && typeof payload === "object" && ("result" in payload || "success" in payload)) {
+    // Envelope for query responses (e.g., config/get response)
+    msgObj.type = type === "config/get" ? "result" : type;
+    msgObj.success = payload.success !== undefined ? Boolean(payload.success) : true;
+    if (payload.result !== undefined) {
+      msgObj.result = payload.result;
+    } else if (payload.payload !== undefined) {
+      msgObj.result = payload.payload;
+    } else {
+      msgObj.result = payload;
+    }
+  } else if (payload !== undefined) {
+    msgObj.type = type;
+    msgObj.payload = payload;
+  } else {
+    msgObj.type = type;
+  }
+
+  const msgStr = JSON.stringify(msgObj);
+
+  // 1. Android Companion App V2 (WebMessageListener) - expects JSON String
   try {
     const extAppV2 = (window as any).externalAppV2;
     if (extAppV2 && typeof extAppV2.postMessage === "function") {
@@ -63,6 +86,7 @@ export const notifyExternalBus = (type: string, payload?: any, id?: number) => {
     console.warn("[ExternalBus] externalAppV2 postMessage error:", err);
   }
 
+  // 2. Android Companion App V1 (JavascriptInterface) - expects JSON String
   try {
     const extApp = (window as any).externalApp;
     if (extApp && typeof extApp.externalBus === "function") {
@@ -74,10 +98,16 @@ export const notifyExternalBus = (type: string, payload?: any, id?: number) => {
     console.warn("[ExternalBus] externalApp notify error:", err);
   }
 
+  // 3. iOS Companion App WebKit messageHandler - requires native JS Object dictionary
+  // so WKWebView bridges it directly into a Swift [String: Any] dictionary required by Alamofire/ObjectMapper
   try {
     const webkit = (window as any).webkit;
     if (webkit?.messageHandlers?.externalBus?.postMessage) {
-      webkit.messageHandlers.externalBus.postMessage(msgStr);
+      try {
+        webkit.messageHandlers.externalBus.postMessage(msgObj);
+      } catch (e) {
+        webkit.messageHandlers.externalBus.postMessage(msgStr);
+      }
     }
   } catch (err) {
     console.warn("[ExternalBus] webkit externalBus postMessage error:", err);
@@ -153,6 +183,7 @@ export const handleIncomingExternalBusMessage = (msgStr: string | any) => {
 
     if (msg?.type === "config/get") {
       notifyExternalBus("config/get", {
+        success: true,
         result: {
           ha_version: "2026.9.1",
           location_name: "Yimly Home"
