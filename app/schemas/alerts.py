@@ -9,7 +9,7 @@ class AlertCreate(BaseModel):
     circle_id: int
     user_id: int
     target_user_id: Optional[int] = None
-    alert_type: AlertType
+    alert_type: str
     title: str = Field(..., min_length=1, max_length=255)
     message: str = Field(..., min_length=1)
 

@@ -68,17 +68,9 @@ class MobileAppService:
                 await db.execute(delete(LocationHistory).where(LocationHistory.device_id == existing_device.id))
                 await db.execute(delete(GeofenceState).where(GeofenceState.device_id == existing_device.id))
 
-                # Reassign sensors and entity states to the new authenticated user
-                await db.execute(
-                    update(SensorRegistration)
-                    .where(SensorRegistration.device_id == existing_device.id)
-                    .values(user_id=user_id)
-                )
-                await db.execute(
-                    update(EntityState)
-                    .where(EntityState.device_id == existing_device.id)
-                    .values(user_id=user_id)
-                )
+                # Clean up old entities and sensors on physical device reassignment
+                await db.execute(delete(SensorRegistration).where(SensorRegistration.device_id == existing_device.id))
+                await db.execute(delete(EntityState).where(EntityState.device_id == existing_device.id))
 
                 # Update device owner & metadata
                 existing_device.user_id = user_id

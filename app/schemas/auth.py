@@ -25,6 +25,9 @@ class UserResponse(BaseModel):
     notify_low_battery: bool = True
     notify_device_offline: bool = True
     is_active: bool
+    access_token: Optional[str] = None
+    token: Optional[str] = None
+    token_type: Optional[str] = "Bearer"
 
     class Config:
         from_attributes = True

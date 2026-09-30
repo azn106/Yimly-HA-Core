@@ -21,10 +21,19 @@ def get_password_hash(password: str) -> str:
     return hashed.decode('utf-8')
 
 
-def create_jwt_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+def create_jwt_token(data: Any, expires_delta: Any = None) -> str:
     import secrets
-    to_encode = data.copy()
-    if expires_delta:
+    if isinstance(data, (int, str)):
+        to_encode = {"sub": str(data), "typ": "access"}
+        if isinstance(expires_delta, str):
+            to_encode["username"] = expires_delta
+            expires_delta = None
+    elif isinstance(data, dict):
+        to_encode = data.copy()
+    else:
+        to_encode = dict(data)
+
+    if isinstance(expires_delta, timedelta):
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

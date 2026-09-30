@@ -29,6 +29,8 @@ def setup_test_db():
 
     app.db.database.async_session_maker = db_session_test_maker
     app.api.websocket.async_session_maker = db_session_test_maker
+    from app.main import app as fastapi_app
+    fastapi_app.dependency_overrides[get_db] = override_get_db
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

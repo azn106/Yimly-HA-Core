@@ -59,7 +59,7 @@ async def cleanup_history_for_user(
     stmt = delete(LocationHistory).where(
         LocationHistory.user_id == user_id,
         LocationHistory.timestamp < cutoff
-    )
+    ).execution_options(synchronize_session=False)
     result = await db.execute(stmt)
     await db.commit()
     return getattr(result, "rowcount", 0)
@@ -67,7 +67,10 @@ async def cleanup_history_for_user(
 class TelemetryService:
     @staticmethod
     async def get_canonical_tracker_entity_id(db: AsyncSession, device: Device) -> str:
-        """Constructs the single canonical entity ID: device_tracker.<slugified_username>."""
+        """Constructs canonical entity ID: device_tracker.<device_name> for HA companion apps, or device_tracker.<username> for Yimly/Traccar."""
+        if device.app_id and device.app_id.startswith("io.homeassistant.companion"):
+            entity_name = slugify(device.device_name) or f"device_{device.id}"
+            return f"device_tracker.{entity_name}"
         if device.user_id:
             stmt = select(User.username).where(User.id == device.user_id)
             res = await db.execute(stmt)

@@ -22,6 +22,7 @@ import {
   Camera,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   LogOut,
   X,
   KeyRound,
@@ -1378,6 +1379,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  // Delete Account States
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+  const [deleteAccountConfirmText, setDeleteAccountConfirmText] = useState("");
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    if (deleteAccountConfirmText.trim() !== "DELETE") {
+      setDeleteAccountError("Please type DELETE to confirm account deletion.");
+      return;
+    }
+    setDeleteAccountLoading(true);
+    setDeleteAccountError(null);
+    try {
+      const token = getToken();
+      const res = await fetch("/api/auth/account", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Failed to delete account. Please try again.");
+      }
+      setShowDeleteAccountModal(false);
+      onLogout();
+    } catch (err: any) {
+      console.error("Account deletion failed:", err);
+      setDeleteAccountError(err.message || "Failed to delete account.");
+    } finally {
+      setDeleteAccountLoading(false);
+    }
+  };
+
   return (
     <div className="w-full text-slate-800 pb-12 font-sans selection:bg-indigo-100">
       {/* Top Header Bar matching requested title styling */}
@@ -2651,6 +2687,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </div>
 
+      {/* Danger Zone: Account Deletion */}
+      <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-rose-200/80 space-y-4 mt-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Danger Zone</h2>
+            <p className="text-xs text-slate-500">Irreversible actions and permanent account deletion</p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-rose-950">Delete Account</h3>
+            <p className="text-xs text-rose-700/80 leading-relaxed max-w-lg">
+              Permanently delete your account, connected devices, tracking history, alerts, and circle memberships. This action is immediate and cannot be undone.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteAccountError(null);
+              setDeleteAccountConfirmText("");
+              setShowDeleteAccountModal(true);
+            }}
+            id="delete-account-button"
+            className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Delete Account</span>
+          </button>
+        </div>
+      </div>
+
       {/* ======================================================== */}
       {/* MODALS & OVERLAYS */}
       {/* ======================================================== */}
@@ -2704,6 +2775,77 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               >
                 {deletingDeviceId && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>{deletingDeviceId ? "Deleting..." : "Delete"}</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteAccountModal && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto pointer-events-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deleteAccountLoading) {
+              setShowDeleteAccountModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-rose-100 relative my-auto space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-bold text-slate-900">Permanently Delete Account?</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                This action is <span className="font-bold text-rose-600">permanent and cannot be undone</span>. All your GPS tracking history, connected devices, alerts, and circle memberships will be immediately purged.
+              </p>
+            </div>
+
+            {deleteAccountError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                {deleteAccountError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                To confirm, type <span className="font-bold text-rose-600">DELETE</span> below:
+              </label>
+              <input
+                type="text"
+                value={deleteAccountConfirmText}
+                onChange={(e) => setDeleteAccountConfirmText(e.target.value)}
+                placeholder="Type DELETE to confirm"
+                id="delete-account-confirm-input"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                disabled={deleteAccountLoading}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleteAccountConfirmText.trim() !== "DELETE" || deleteAccountLoading}
+                id="confirm-delete-account-button"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleteAccountLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>Permanently Delete</span>
               </button>
             </div>
           </div>

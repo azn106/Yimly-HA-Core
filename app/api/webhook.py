@@ -192,7 +192,7 @@ async def handle_webhook(
                 device.first_telemetry_received = True
                 device.device_offline_alert_triggered = False
                 await db.commit()
-            return JSONResponse(content={}, status_code=status.HTTP_200_OK)
+            return JSONResponse(content={"status": "ok"}, status_code=status.HTTP_200_OK)
         except HTTPException:
             raise
         except Exception as e:
@@ -212,7 +212,7 @@ async def handle_webhook(
             device.first_telemetry_received = True
             device.device_offline_alert_triggered = False
             await db.commit()
-            return JSONResponse(content={"success": True}, status_code=status.HTTP_201_CREATED)
+            return JSONResponse(content={"status": "registered"}, status_code=status.HTTP_200_OK)
         except HTTPException:
             raise
         except Exception as e:

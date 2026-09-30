@@ -252,6 +252,8 @@ async def _handle_traccar_request(token: Optional[str], request: Request, db: As
     existing_entity = res_existing.scalar_one_or_none()
 
     existing_time = existing_entity.last_updated if (existing_entity and existing_entity.last_updated) else datetime.min.replace(tzinfo=timezone.utc)
+    if existing_time and existing_time.tzinfo is None:
+        existing_time = existing_time.replace(tzinfo=timezone.utc)
     is_newer_fix = fix_dt >= existing_time
 
     # [TEMPORARY DIAGNOSTIC] Forensic trace logging for Traccar POST identity mapping

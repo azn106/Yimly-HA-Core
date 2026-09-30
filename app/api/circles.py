@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_authenticated_user
@@ -157,12 +157,6 @@ async def leave_circle(
             detail="Circle not found."
         )
 
-    if circle.owner_id == user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Circle owner cannot leave the circle. Delete the circle instead."
-        )
-
     stmt_member = select(CircleMember).where(
         CircleMember.circle_id == circle_id,
         CircleMember.user_id == user.id
@@ -171,15 +165,35 @@ async def leave_circle(
     member = res_member.scalar_one_or_none()
     if not member:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="You are not a member of this circle."
         )
 
+    circle_name = circle.name
     await db.delete(member)
+    await db.flush()
+
+    # Check remaining members
+    stmt_remaining = select(func.count()).select_from(CircleMember).where(CircleMember.circle_id == circle_id)
+    res_remaining = await db.execute(stmt_remaining)
+    remaining_count = res_remaining.scalar()
+
+    if remaining_count == 0:
+        # If last member left, delete circle automatically
+        await db.delete(circle)
+    elif circle.owner_id == user.id:
+        # If owner left but other members remain, reassign owner to first remaining member
+        stmt_next = select(CircleMember).where(CircleMember.circle_id == circle_id, CircleMember.user_id.isnot(None))
+        res_next = await db.execute(stmt_next)
+        next_member = res_next.scalar_one_or_none()
+        if next_member and next_member.user_id:
+            circle.owner_id = next_member.user_id
+
     await db.commit()
-    return {"status": "success", "message": "Successfully left the circle."}
+    return {"status": "success", "success": True, "message": f"Successfully left {circle_name}."}
 
 @router.delete("/{circle_id}")
+@router.post("/{circle_id}/delete")
 async def delete_circle(
     circle_id: int,
     db: AsyncSession = Depends(get_db),
@@ -195,10 +209,14 @@ async def delete_circle(
             detail="Circle not found."
         )
 
-    if circle.owner_id != user.id:
+    stmt_member = select(CircleMember).where(CircleMember.circle_id == circle_id, CircleMember.user_id == user.id)
+    res_member = await db.execute(stmt_member)
+    member = res_member.scalar_one_or_none()
+
+    if circle.owner_id != user.id and not member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the circle creator / owner can delete this Circle."
+            detail="Not authorized: Only authorized members of this circle can delete it."
         )
 
     circle_name = circle.name
@@ -207,6 +225,7 @@ async def delete_circle(
 
     return {
         "status": "success",
+        "success": True,
         "message": f'Family Circle "{circle_name}" has been deleted.'
     }
 
@@ -438,8 +457,8 @@ async def update_circle_member(
         member.avatar_color = member_in.avatar_color
     if member_in.profile_picture_url is not None:
         member.profile_picture_url = member_in.profile_picture_url
-    if member_in.assigned_entity_id is not None:
-        clean_entity = member_in.assigned_entity_id.strip()
+    if "assigned_entity_id" in member_in.model_fields_set:
+        clean_entity = member_in.assigned_entity_id.strip() if member_in.assigned_entity_id else None
         if clean_entity:
             if member.user_id:
                 stmt_check = select(EntityState).where(
@@ -471,7 +490,7 @@ async def update_circle_member(
             user.display_name = member_in.display_name.strip()
         if member_in.avatar_color:
             user.avatar_color = member_in.avatar_color
-        if member_in.assigned_entity_id is not None:
+        if "assigned_entity_id" in member_in.model_fields_set:
             user.assigned_entity_id = member.assigned_entity_id
 
     await db.commit()

@@ -1,11 +1,65 @@
 import asyncio
+import os
 import pytest
 from httpx import AsyncClient, ASGITransport
-from app.main import app
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from app.main import app as fastapi_app
+from app.db.database import Base, get_db
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:////tmp/test_ha_device_assign.db"
+test_engine = create_async_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+db_session_test_maker = async_sessionmaker(bind=test_engine, class_=AsyncSession, expire_on_commit=False)
+
+async def override_get_db():
+    async with db_session_test_maker() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+@pytest.fixture(autouse=True, scope="function")
+def setup_test_db():
+    import app.db.database
+    import app.api.websocket
+    orig_session_maker = app.db.database.async_session_maker
+    orig_ws_session_maker = getattr(app.api.websocket, "async_session_maker", None)
+
+    app.db.database.async_session_maker = db_session_test_maker
+    app.api.websocket.async_session_maker = db_session_test_maker
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def create_tables():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        async with db_session_test_maker() as session:
+            from app.services.auth_service import AuthService
+            from app.schemas.auth import UserCreate
+            await AuthService.create_user(session, UserCreate(username="setup_admin_base", password="AdminPassword123!", display_name="Setup Admin"))
+
+    async def drop_tables():
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+
+    loop.run_until_complete(create_tables())
+    yield
+    loop.run_until_complete(drop_tables())
+    loop.run_until_complete(test_engine.dispose())
+    loop.close()
+
+    app.db.database.async_session_maker = orig_session_maker
+    if orig_ws_session_maker is not None:
+        app.api.websocket.async_session_maker = orig_ws_session_maker
 
 @pytest.mark.asyncio
 async def test_ha_device_discovery_and_member_assignment():
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. Register User
         user_reg = await ac.post("/api/auth/register", json={

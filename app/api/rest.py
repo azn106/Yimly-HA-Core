@@ -485,28 +485,94 @@ async def api_delete_device(
     user: User = Depends(require_authenticated_user),
     db: AsyncSession = Depends(get_db)
 ):
+    from sqlalchemy import cast, String, delete
+    from app.db.models import LocationHistory, SensorRegistration, GeofenceState, CircleMember
+    from app.services.event_service import event_bus
+
+    # 1. Lookup by EntityState
     stmt = select(EntityState).where(
         EntityState.user_id == user.id,
         EntityState.entity_id == entity_id
     )
     res = await db.execute(stmt)
     st = res.scalar_one_or_none()
-    if not st:
+
+    # 2. Lookup by Device (in case entity_id passed is device_id or ID)
+    stmt_dev = select(Device).where(
+        Device.user_id == user.id,
+        (
+            (cast(Device.id, String) == entity_id)
+            | (Device.device_id == entity_id)
+            | (Device.webhook_id == entity_id)
+            | (Device.id == (st.device_id if st and st.device_id else -1))
+        )
+    )
+    res_dev = await db.execute(stmt_dev)
+    dev = res_dev.scalar_one_or_none()
+
+    if not st and not dev:
         raise HTTPException(status_code=404, detail="Device entity not found")
 
-    device_id = st.device_id
-    await db.delete(st)
+    deleted_entity_ids = set()
+    if st:
+        deleted_entity_ids.add(st.entity_id)
 
-    if device_id:
-        stmt_dev = select(Device).where(
-            Device.id == device_id,
-            Device.user_id == user.id
+    if dev:
+        # Collect all entity states associated with this device
+        stmt_dev_ents = select(EntityState).where(
+            (EntityState.device_id == dev.id) | ((EntityState.user_id == user.id) & (EntityState.entity_id == f"device_tracker.{dev.device_id}"))
         )
-        res_dev = await db.execute(stmt_dev)
-        dev = res_dev.scalar_one_or_none()
-        if dev:
-            await db.delete(dev)
+        res_dev_ents = await db.execute(stmt_dev_ents)
+        dev_entities = res_dev_ents.scalars().all()
+        for e in dev_entities:
+            deleted_entity_ids.add(e.entity_id)
+            await db.delete(e)
+
+        # Delete dependent LocationHistory, SensorRegistrations, GeofenceStates
+        await db.execute(
+            delete(LocationHistory).where(LocationHistory.device_id == dev.id).execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            delete(SensorRegistration).where(SensorRegistration.device_id == dev.id).execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            delete(GeofenceState).where(GeofenceState.device_id == dev.id).execution_options(synchronize_session=False)
+        )
+
+        await db.delete(dev)
+
+        if st and st not in dev_entities:
+            await db.delete(st)
+    elif st:
+        await db.delete(st)
+
+    # Clear circle member and user assigned_entity_id references
+    if deleted_entity_ids:
+        stmt_cm = select(CircleMember).where(CircleMember.assigned_entity_id.in_(list(deleted_entity_ids)))
+        res_cm = await db.execute(stmt_cm)
+        for cm in res_cm.scalars().all():
+            cm.assigned_entity_id = None
+            db.add(cm)
+
+        if user.assigned_entity_id in deleted_entity_ids:
+            user.assigned_entity_id = None
+            db.add(user)
 
     await db.commit()
+
+    # Broadcast WebSocket state_changed removal event
+    for e_id in deleted_entity_ids:
+        try:
+            await event_bus.fire(
+                "state_changed",
+                {
+                    "entity_id": e_id,
+                    "old_state": {"entity_id": e_id},
+                    "new_state": None
+                },
+                user_id=user.id
+            )
+        except Exception:
+            pass
 
     return {"success": True, "message": "Device deleted successfully"}

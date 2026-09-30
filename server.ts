@@ -1639,6 +1639,77 @@ app.delete(["/api/auth/profile/picture", "/api/auth/profile-picture"], authentic
   }
 });
 
+app.delete(["/api/auth/account", "/api/users/me"], authenticateToken, (req: AuthRequest, res: Response) => {
+  db = loadDB();
+  const userId = req.user!.id;
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ detail: "User not found" });
+  }
+
+  // 1. Remove profile picture if local
+  if (user.profile_picture_url) {
+    const oldFileName = path.basename(user.profile_picture_url);
+    const checkPaths = [
+      path.join(profilePicsDir, oldFileName),
+      path.join(process.cwd(), "uploads", "profile_pictures", oldFileName)
+    ];
+    for (const oldFilePath of checkPaths) {
+      if (fs.existsSync(oldFilePath)) {
+        try { fs.unlinkSync(oldFilePath); } catch (e) {}
+      }
+    }
+  }
+
+  // 2. Remove user devices and entities
+  const deletedEntities = db.entity_states.filter((e) => e.user_id === userId).map((e) => e.entity_id);
+  db.entity_states = db.entity_states.filter((e) => e.user_id !== userId);
+  db.devices = (db.devices || []).filter((d) => d.user_id !== userId);
+  db.location_history = (db.location_history || []).filter((lh) => lh.user_id !== userId);
+  db.alerts = (db.alerts || []).filter((a) => a.user_id !== userId && a.target_user_id !== userId);
+
+  // 3. Circles owned or joined
+  const ownedCircles = db.circles.filter((c) => c.owner_id === userId);
+  for (const c of ownedCircles) {
+    const remainingMembers = db.circle_members.filter((m) => m.circle_id === c.id && m.user_id !== userId && m.user_id !== null);
+    if (remainingMembers.length > 0) {
+      c.owner_id = remainingMembers[0].user_id!;
+    } else {
+      db.circles = db.circles.filter((circ) => circ.id !== c.id);
+      db.circle_members = db.circle_members.filter((m) => m.circle_id !== c.id);
+      db.places = (db.places || []).filter((p) => p.circle_id !== c.id);
+    }
+  }
+
+  db.circle_members = db.circle_members.filter((m) => m.user_id !== userId);
+  for (const cm of db.circle_members) {
+    if (cm.assigned_entity_id && deletedEntities.includes(cm.assigned_entity_id)) {
+      cm.assigned_entity_id = null;
+    }
+  }
+
+  // 4. Remove user
+  db.users = db.users.filter((u) => u.id !== userId);
+  saveDB(db);
+
+  // Broadcast entity removals
+  for (const entId of deletedEntities) {
+    broadcastStateUpdate({
+      event_type: "state_changed",
+      data: {
+        entity_id: entId,
+        old_state: { entity_id: entId },
+        new_state: null
+      }
+    });
+  }
+
+  res.json({
+    status: "success",
+    message: `Account for user '${user.username}' has been permanently deleted.`
+  });
+});
+
 // Family Circles Routes
 app.get("/api/circles", authenticateToken, (req: AuthRequest, res) => {
   db = loadDB();

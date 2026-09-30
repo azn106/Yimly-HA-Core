@@ -294,7 +294,12 @@ async def setup_register(user_in: UserCreate, db: AsyncSession = Depends(get_db)
         )
 
     user = await AuthService.create_user(db, user_in)
-    return user
+    token = create_jwt_token(data={"sub": str(user.id), "typ": "access"})
+    resp = UserResponse.model_validate(user)
+    resp.access_token = token
+    resp.token = token
+    resp.token_type = "Bearer"
+    return resp
 
 
 @router.post("/api/auth/register", response_model=UserResponse)
@@ -319,7 +324,12 @@ async def api_register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
         )
 
     user = await AuthService.create_user(db, user_in)
-    return user
+    token = create_jwt_token(data={"sub": str(user.id), "typ": "access"})
+    resp = UserResponse.model_validate(user)
+    resp.access_token = token
+    resp.token = token
+    resp.token_type = "Bearer"
+    return resp
 
 
 @router.post("/api/auth/login")
@@ -655,3 +665,21 @@ async def delete_profile_picture(
         await db.refresh(current_user)
 
     return current_user
+
+
+@router.delete("/api/auth/account")
+@router.delete("/api/users/me")
+async def delete_account(
+    current_user: User = Depends(require_authenticated_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently deletes the authenticated user's account and all associated
+    personal data, devices, entities, location history, and circle references.
+    """
+    username = current_user.username
+    await AuthService.delete_user_account(db, current_user)
+    return {
+        "status": "success",
+        "message": f"Account for user '{username}' has been permanently deleted."
+    }
