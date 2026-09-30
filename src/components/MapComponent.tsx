@@ -2427,61 +2427,7 @@ export const MapComponent = React.forwardRef<MapComponentHandle, MapComponentPro
       {/* ADAPTIVE OFF-SCREEN MEMBER INDICATORS */}
       {renderOffScreenIndicators()}
 
-      {/* FLOATING MEMBER AVATARS BAR (CENTRED AT VERY TOP) */}
-      {membersWithLocation.length > 0 && (
-        <div className="hidden sm:flex absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none justify-center max-w-[calc(100vw-2rem)]">
-          <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto p-1.5 bg-white/85 backdrop-blur-2xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-full max-w-full scrollbar-none">
-            {/* Member Pills with Saved Avatar Colors (Icon/Avatar Only) */}
-            {membersWithLocation.map((member) => {
-              const isSelected = selectedMemberId === member.id;
-              const memberColor = getAvatarColor(member.avatar_color);
 
-              return (
-                <button
-                  key={member.id}
-                  onClick={() => handleFocusMember(member)}
-                  title={member.display_name}
-                  aria-label={member.display_name}
-                  className={`relative w-9 h-9 transition shrink-0 cursor-pointer ${
-                    isSelected ? "scale-110 shadow-md" : "hover:scale-105"
-                  }`}
-                  style={{
-                    backgroundColor: isSelected ? memberColor : "rgba(226, 232, 240, 0.8)",
-                    clipPath: "url(#squircle-clip-map)",
-                    boxShadow: isSelected ? `0 0 10px ${memberColor}40` : "none",
-                  }}
-                >
-                  {/* White Border Spacer */}
-                  <div
-                    className="absolute inset-[1.5px] bg-white flex items-center justify-center"
-                    style={{ clipPath: "url(#squircle-clip-map)" }}
-                  >
-                    {/* Profile Image & Background */}
-                    <div
-                      className="absolute inset-[1.5px] text-white font-extrabold text-xs flex items-center justify-center overflow-hidden shrink-0"
-                      style={{ 
-                        backgroundColor: memberColor,
-                        clipPath: "url(#squircle-clip-map)"
-                      }}
-                    >
-                      {member.profile_picture_url ? (
-                        <img
-                          src={member.profile_picture_url}
-                          alt={member.display_name}
-                          className="w-full h-full object-cover"
-                          style={{ clipPath: "url(#squircle-clip-map)" }}
-                        />
-                      ) : (
-                        member.display_name.charAt(0).toUpperCase()
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* FLOATING MAP CONTROLS (RIGHT SIDEBAR) */}
       <div className="absolute right-3 sm:right-4 top-16 sm:top-20 z-20 pointer-events-auto flex flex-col gap-2.5">
