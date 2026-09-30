@@ -1855,8 +1855,10 @@ app.get("/api/circles/:id/members", authenticateToken, (req: AuthRequest, res) =
         const haLoc = nodeHAClient.getEntityLocation(assignedEntityId);
         if (haLoc) devices.push(haLoc);
       } else {
-        // Look in local entity states
-        const localEntity = db.entity_states.find((e) => e.entity_id === assignedEntityId);
+        // Look in local entity states — REQUIRED: must belong to the linked user!
+        const localEntity = db.entity_states.find(
+          (e) => e.entity_id === assignedEntityId && (linkedUser ? e.user_id === linkedUser.id : true)
+        );
         if (localEntity && localEntity.latitude != null && localEntity.longitude != null) {
           devices.push({
             entity_id: localEntity.entity_id,
@@ -2007,7 +2009,15 @@ app.put("/api/circles/:id/members/:memberId", authenticateToken, (req: AuthReque
     cm.profile_picture_url = profile_picture_url;
   }
   if (assigned_entity_id !== undefined) {
-    cm.assigned_entity_id = assigned_entity_id ? String(assigned_entity_id).trim() : null;
+    const cleanEntity = assigned_entity_id ? String(assigned_entity_id).trim() : null;
+    if (cleanEntity && cm.user_id) {
+      // Validate that assigned_entity_id actually belongs to this user
+      const isOwned = db.entity_states.some((e) => e.entity_id === cleanEntity && e.user_id === cm.user_id);
+      if (!isOwned) {
+        return res.status(400).json({ detail: "Invalid assigned_entity_id: entity does not belong to this user" });
+      }
+    }
+    cm.assigned_entity_id = cleanEntity;
   }
 
   // If this member is linked to a user, sync user record
@@ -2028,7 +2038,9 @@ app.put("/api/circles/:id/members/:memberId", authenticateToken, (req: AuthReque
       const loc = nodeHAClient.getEntityLocation(cm.assigned_entity_id);
       if (loc) devices.push(loc);
     } else {
-      const localEntity = db.entity_states.find((e) => e.entity_id === cm.assigned_entity_id);
+      const localEntity = db.entity_states.find(
+        (e) => e.entity_id === cm.assigned_entity_id && (cm.user_id ? e.user_id === cm.user_id : true)
+      );
       if (localEntity && localEntity.latitude != null && localEntity.longitude != null) {
         devices.push({
           entity_id: localEntity.entity_id,

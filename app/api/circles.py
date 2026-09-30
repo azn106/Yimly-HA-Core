@@ -293,11 +293,14 @@ async def list_circle_members(
                     devices_loc.append(loc)
 
         # 2. If an assigned entity ID is specified and not yet in devices_loc, resolve it from local EntityState
-        if assigned_entity_id:
+        # REQUIREMENT: Must belong to the linked user!
+        target_user_id = linked_user.id if linked_user else None
+        if assigned_entity_id and target_user_id:
             already_present = any(d.entity_id == assigned_entity_id for d in devices_loc)
             if not already_present:
                 stmt_assigned = select(EntityState).where(
                     EntityState.entity_id == assigned_entity_id,
+                    EntityState.user_id == target_user_id,
                     EntityState.domain == "device_tracker"
                 )
                 res_assigned = await db.execute(stmt_assigned)
@@ -420,6 +423,17 @@ async def update_circle_member(
         member.profile_picture_url = member_in.profile_picture_url
     if member_in.assigned_entity_id is not None:
         clean_entity = member_in.assigned_entity_id.strip()
+        if clean_entity and member.user_id:
+            stmt_check = select(EntityState).where(
+                EntityState.entity_id == clean_entity,
+                EntityState.user_id == member.user_id
+            )
+            res_check = await db.execute(stmt_check)
+            if not res_check.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid assigned_entity_id: entity does not belong to this user."
+                )
         member.assigned_entity_id = clean_entity if clean_entity else None
 
     # If linked to a user and this user is updating their own member profile, sync user table
@@ -441,6 +455,8 @@ async def update_circle_member(
             EntityState.entity_id == member.assigned_entity_id,
             EntityState.domain == "device_tracker"
         )
+        if member.user_id:
+            stmt_dt = stmt_dt.where(EntityState.user_id == member.user_id)
         res_dt = await db.execute(stmt_dt)
         dt = res_dt.scalar_one_or_none()
         if dt:

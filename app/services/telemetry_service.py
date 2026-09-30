@@ -66,6 +66,20 @@ async def cleanup_history_for_user(
 
 class TelemetryService:
     @staticmethod
+    async def get_canonical_tracker_entity_id(db: AsyncSession, device: Device) -> str:
+        """Constructs the single canonical entity ID: device_tracker.<slugified_username>."""
+        if device.user_id:
+            stmt = select(User.username).where(User.id == device.user_id)
+            res = await db.execute(stmt)
+            username = res.scalar_one_or_none()
+            if username:
+                entity_name = slugify(username)
+                if entity_name:
+                    return f"device_tracker.{entity_name}"
+        entity_name = slugify(device.device_name) or f"device_{device.id}"
+        return f"device_tracker.{entity_name}"
+
+    @staticmethod
     async def process_location_update(
         db: AsyncSession,
         device: Device,
@@ -111,10 +125,7 @@ class TelemetryService:
             await cleanup_history_for_user(db, device.user_id, user_retention)
 
         # 2. Update Device Tracker Entity State
-        entity_name = slugify(device.device_name)
-        if not entity_name:
-            entity_name = f"device_{device.id}"
-        entity_id = f"device_tracker.{entity_name}"
+        entity_id = await TelemetryService.get_canonical_tracker_entity_id(db, device)
 
         # Update last_known_battery if battery is provided in location update
         if data.battery is not None:
@@ -303,8 +314,7 @@ class TelemetryService:
                         continue
 
                     # Respect device-level me_only visibility if set
-                    entity_name = slugify(device.device_name) or f"device_{device.id}"
-                    entity_id = f"device_tracker.{entity_name}"
+                    entity_id = await TelemetryService.get_canonical_tracker_entity_id(db, device)
                     estate = await StateService.get_state(db, device.user_id, entity_id)
                     if estate:
                         attrs = estate.attributes if isinstance(estate.attributes, dict) else {}
@@ -499,8 +509,7 @@ class TelemetryService:
                         logging.getLogger("ha_server").error(f"Error evaluating low battery from sensor update: {low_batt_err}")
 
                     # Find and update corresponding device_tracker entity
-                    entity_name = slugify(device.device_name) or f"device_{device.id}"
-                    tracker_entity_id = f"device_tracker.{entity_name}"
+                    tracker_entity_id = await TelemetryService.get_canonical_tracker_entity_id(db, device)
                     
                     tracker_state = await StateService.get_state(db, device.user_id, tracker_entity_id)
                     if tracker_state:
@@ -522,8 +531,7 @@ class TelemetryService:
             elif is_battery_state_sensor and item.state:
                 battery_state_val = str(item.state).strip().lower()
                 is_charging_val = battery_state_val in ("charging", "full", "charging_ac", "charging_usb", "charging_wireless")
-                entity_name = slugify(device.device_name) or f"device_{device.id}"
-                tracker_entity_id = f"device_tracker.{entity_name}"
+                tracker_entity_id = await TelemetryService.get_canonical_tracker_entity_id(db, device)
                 
                 tracker_state = await StateService.get_state(db, device.user_id, tracker_entity_id)
                 if tracker_state:
@@ -546,8 +554,7 @@ class TelemetryService:
             elif is_charging_sensor and item.state is not None:
                 val_str = str(item.state).strip().lower()
                 is_charging_val = val_str in ("on", "true", "yes", "charging")
-                entity_name = slugify(device.device_name) or f"device_{device.id}"
-                tracker_entity_id = f"device_tracker.{entity_name}"
+                tracker_entity_id = await TelemetryService.get_canonical_tracker_entity_id(db, device)
                 
                 tracker_state = await StateService.get_state(db, device.user_id, tracker_entity_id)
                 if tracker_state:
