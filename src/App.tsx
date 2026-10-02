@@ -21,6 +21,7 @@ import { PlacesTab } from "./components/PlacesTab";
 import { AlertsTab } from "./components/AlertsTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { getAvatarColor } from "./lib/avatarColor";
+import yimhaLogo from "./assets/images/regenerated_image_1790900250558.jpg";
 
 // Re-export external bus helpers for backward compatibility
 export { notifyExternalBus, revokeExternalAuth, requestExternalAuthToken } from "./lib/externalBus";
@@ -964,9 +965,7 @@ export default function App() {
         /* FIRST-RUN SETUP / LOGIN FLOW */
         <div className="min-h-screen bg-slate-50 flex flex-col justify-between py-12 px-4 sm:px-6 lg:px-8">
           <header className="flex flex-col items-center space-y-3 select-none" id="app-header">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-50/80 text-indigo-600 flex items-center justify-center shadow-sm border border-indigo-100/30">
-              <Home className="h-6 w-6" />
-            </div>
+            <img src={yimhaLogo} alt="YIMHA Logo" className="w-48 h-48 rounded-2xl shadow-sm border border-indigo-100/30 object-cover" />
             <h1 className="text-xl font-black tracking-widest text-slate-800" id="brand-title">
               YIMLY HOME
             </h1>
@@ -1100,7 +1099,8 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer"
+                      className="w-full hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer"
+                      style={{ backgroundColor: '#aa27a0' }}
                     >
                       {loading ? "Creating account..." : (status === "setup" ? "Complete Setup" : "Register")}
                     </button>
@@ -1193,7 +1193,8 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer"
+                      className="w-full hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-xs uppercase tracking-wider transition shadow-sm cursor-pointer"
+                      style={{ backgroundColor: '#aa27a0' }}
                     >
                       {loading ? "Signing in..." : "Sign In"}
                     </button>
