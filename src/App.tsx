@@ -21,7 +21,7 @@ import { PlacesTab } from "./components/PlacesTab";
 import { AlertsTab } from "./components/AlertsTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { getAvatarColor } from "./lib/avatarColor";
-import yimhaLogo from "./assets/images/regenerated_image_1790900250558.jpg";
+import yimhaLogo from "./assets/images/yim-kin-logo.png";
 
 // Re-export external bus helpers for backward compatibility
 export { notifyExternalBus, revokeExternalAuth, requestExternalAuthToken } from "./lib/externalBus";
