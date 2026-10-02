@@ -1829,7 +1829,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                       )}
                     </div>
                     <span className="text-[11px] text-slate-400 font-semibold mt-2.5">
-                      Scan with Yimly to join instantly
+                      Scan with YIMHA to join instantly
                     </span>
                   </div>
 
@@ -2415,7 +2415,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Device ID (Yimly Username)
+                      Device ID (YIMHA Username)
                     </label>
                     <div className="flex items-center gap-2 bg-white/90 border border-slate-200/80 rounded-xl p-2.5">
                       <span className="text-xs font-mono font-bold text-slate-800 truncate select-all flex-1">
@@ -2744,7 +2744,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <div className="text-center">
               <h3 className="text-base font-bold text-slate-800">Delete Device?</h3>
               <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Are you sure you want to delete <strong className="text-slate-800 font-bold">{deleteConfirmDevice.name}</strong>? This device will be permanently removed from your Yimly account.
+                Are you sure you want to delete <strong className="text-slate-800 font-bold">{deleteConfirmDevice.name}</strong>? This device will be permanently removed from your YIMHA account.
               </p>
             </div>
 
@@ -3089,7 +3089,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   type="text"
                   value={newCircleNameInput}
                   onChange={(e) => setNewCircleNameInput(e.target.value)}
-                  placeholder="e.g. The Yimly Family"
+                  placeholder="e.g. The YIMHA Family"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>

@@ -983,10 +983,13 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="flex flex-col items-center space-y-3"
+                  className="flex flex-col items-center space-y-4"
                 >
-                  <RefreshCw className="h-7 w-7 text-indigo-600 animate-spin" />
-                  <p className="text-sm font-semibold text-slate-500">Checking server initialization state...</p>
+                  <img src={yimhaLogo} alt="YIMHA Logo" className="w-24 h-24 rounded-3xl shadow-sm border border-indigo-100/30 object-cover animate-pulse" />
+                  <div className="flex flex-col items-center space-y-1">
+                    <p className="text-sm font-black tracking-widest text-slate-800 uppercase">YIMLY</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Initializing Hub...</p>
+                  </div>
                 </motion.div>
               )}
 
@@ -999,9 +1002,11 @@ export default function App() {
                   transition={{ duration: 0.25 }}
                   className="w-full max-w-md bg-white rounded-3xl shadow-[0_16px_48px_rgba(148,163,184,0.08)] border border-slate-100 p-8 space-y-6"
                 >
-                  <div className="text-center">
-                    <h2 className="text-lg font-bold text-slate-800">Create your account</h2>
-                    <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-lg font-bold text-slate-800">
+                      {status === "setup" ? "Yimly Installation" : "Create Account"}
+                    </h2>
+                    <p className="text-xs text-slate-400 leading-relaxed">
                       {status === "setup"
                         ? "First-run installation detected. Set up administrator credentials."
                         : "Create your user account to join a Family Circle."}
@@ -1132,10 +1137,7 @@ export default function App() {
                   transition={{ duration: 0.25 }}
                   className="w-full max-w-md bg-white rounded-3xl shadow-[0_16px_48px_rgba(148,163,184,0.08)] border border-slate-100 p-8 space-y-6"
                 >
-                  <div className="text-center space-y-1.5">
-                    <div className="mx-auto w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
-                      <Lock className="w-6 h-6" />
-                    </div>
+                  <div className="text-center space-y-2">
                     <h2 className="text-lg font-bold text-slate-800">Sign In to Yimly</h2>
                     <p className="text-xs text-slate-400 leading-relaxed">
                       Enter your credentials to access your family hub.

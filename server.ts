@@ -1108,7 +1108,7 @@ app.post("/api/setup/register", (req, res) => {
     id: db.circles.length + 1,
     name: `${display_name}'s Family Circle`,
     owner_id: newUser.id,
-    invite_code: "YIMLY-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
+    invite_code: "YIMHA-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
     created_at: new Date().toISOString()
   };
 
@@ -1170,7 +1170,7 @@ app.post("/api/auth/register", (req, res) => {
       id: 1,
       name: "Family Circle",
       owner_id: newUser.id,
-      invite_code: "YIMLY-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
+      invite_code: "YIMHA-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
       created_at: new Date().toISOString()
     };
     db.circles.push(defaultCircle);
@@ -1336,7 +1336,7 @@ app.post("/api/auth/ha-callback", async (req, res) => {
           id: 1,
           name: "Family Circle",
           owner_id: newUser.id,
-          invite_code: "YIMLY-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
+          invite_code: "YIMHA-" + crypto.randomBytes(3).toString("hex").toUpperCase(),
           created_at: new Date().toISOString()
         };
         db.circles.push(defaultCircle);
