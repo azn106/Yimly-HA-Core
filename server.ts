@@ -900,7 +900,7 @@ app.get("/auth/authorize", (req, res) => {
 <body>
   <div class="container">
     <div class="header">
-      <img src="/icon-192.png" alt="YIMHA Logo" style="width: 56px; height: 56px; border-radius: 14px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 8px;" />
+      <img src="/icon-192.png" alt="Yim-Kin Logo" style="width: 56px; height: 56px; border-radius: 14px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 8px;" />
       <h1 class="title">Home Assistant</h1>
       <p class="subtitle">Log in to authorize your companion app</p>
     </div>
@@ -3599,7 +3599,7 @@ async function startServer() {
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Yimly Home Core Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`Yim-Kin Home Core Server listening on http://0.0.0.0:${PORT}`);
   });
 }
 

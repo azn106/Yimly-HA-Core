@@ -1,5 +1,5 @@
 {
-  "name": "Remix Yimly Home Assistant",
+  "name": "Yim-Kin",
   "description": "Smart Family Location Sharing & Device Hub",
   "requestFramePermissions": [
     "camera"

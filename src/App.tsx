@@ -965,9 +965,9 @@ export default function App() {
         /* FIRST-RUN SETUP / LOGIN FLOW */
         <div className="min-h-screen bg-slate-50 flex flex-col justify-between py-12 px-4 sm:px-6 lg:px-8">
           <header className="flex flex-col items-center space-y-3 select-none" id="app-header">
-            <img src={yimhaLogo} alt="YIMHA Logo" className="w-48 h-48 rounded-2xl shadow-sm border border-indigo-100/30 object-cover" />
+            <img src={yimhaLogo} alt="Yim-Kin Logo" className="w-48 h-48 rounded-2xl shadow-sm border border-indigo-100/30 object-cover" />
             <h1 className="text-xl font-black tracking-widest text-slate-800" id="brand-title">
-              YIMLY HOME
+              Yim-Kin
             </h1>
             <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
               Secure Companion Bridge & Family Hub
@@ -985,9 +985,9 @@ export default function App() {
                   transition={{ duration: 0.2 }}
                   className="flex flex-col items-center space-y-4"
                 >
-                  <img src={yimhaLogo} alt="YIMHA Logo" className="w-24 h-24 rounded-3xl shadow-sm border border-indigo-100/30 object-cover animate-pulse" />
+                  <img src={yimhaLogo} alt="Yim-Kin Logo" className="w-24 h-24 rounded-3xl shadow-sm border border-indigo-100/30 object-cover animate-pulse" />
                   <div className="flex flex-col items-center space-y-1">
-                    <p className="text-sm font-black tracking-widest text-slate-800 uppercase">YIMLY</p>
+                    <p className="text-sm font-black tracking-widest text-slate-800 uppercase">Yim-Kin</p>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Initializing Hub...</p>
                   </div>
                 </motion.div>
@@ -1004,7 +1004,7 @@ export default function App() {
                 >
                   <div className="text-center space-y-2">
                     <h2 className="text-lg font-bold text-slate-800">
-                      {status === "setup" ? "Yimly Installation" : "Create Account"}
+                      {status === "setup" ? "Yim-Kin Installation" : "Create Account"}
                     </h2>
                     <p className="text-xs text-slate-400 leading-relaxed">
                       {status === "setup"
@@ -1138,7 +1138,7 @@ export default function App() {
                   className="w-full max-w-md bg-white rounded-3xl shadow-[0_16px_48px_rgba(148,163,184,0.08)] border border-slate-100 p-8 space-y-6"
                 >
                   <div className="text-center space-y-2">
-                    <h2 className="text-lg font-bold text-slate-800">Sign In to Yimly</h2>
+                    <h2 className="text-lg font-bold text-slate-800">Sign In to Yim-Kin</h2>
                     <p className="text-xs text-slate-400 leading-relaxed">
                       Enter your credentials to access your family hub.
                     </p>
@@ -1220,7 +1220,7 @@ export default function App() {
           </main>
 
           <footer className="text-center text-[11px] text-slate-400 font-medium">
-            &copy; {new Date().getFullYear()} Yimly Home Core Bridge. All rights reserved.
+            &copy; {new Date().getFullYear()} Yim-Kin Home Core Bridge. All rights reserved.
           </footer>
         </div>
       )}

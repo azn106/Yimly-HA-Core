@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "YIMHA Home",
-  "short_name": "YIMHA",
+  "name": "Yim-Kin",
+  "short_name": "Yim-Kin",
   "description": "Smart Family Location Sharing & Device Hub",
   "start_url": "/",
   "scope": "/",

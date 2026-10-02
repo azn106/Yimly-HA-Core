@@ -186,7 +186,7 @@ export const handleIncomingExternalBusMessage = (msgStr: string | any) => {
         success: true,
         result: {
           ha_version: "2026.9.1",
-          location_name: "Yimly Home"
+          location_name: "Yim-Kin"
         }
       }, msg?.id);
     }
