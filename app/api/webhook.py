@@ -15,6 +15,7 @@ from app.services.telemetry_service import TelemetryService, slugify
 router = APIRouter()
 
 @router.post("/api/webhook/{webhook_id}")
+@router.get("/api/webhook/{webhook_id}")
 async def handle_webhook(
     webhook_id: str,
     request: Request,
@@ -27,6 +28,33 @@ async def handle_webhook(
         logger.warning(f"Unrecognized or superseded webhook_id {webhook_id}. Returning HTTP 410.")
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Webhook deleted or not found.")
 
+    # Detect Traccar telemetry request directed to /api/webhook/{token} for backward compatibility:
+    query_params = request.query_params
+    has_traccar_query = bool(
+        query_params.get("lat") or query_params.get("lon") or
+        query_params.get("id") or query_params.get("deviceid")
+    )
+
+    form_data = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" in content_type:
+        try:
+            raw_form = await request.form()
+            form_data = dict(raw_form)
+        except Exception:
+            pass
+
+    has_traccar_form = bool(
+        form_data.get("lat") or form_data.get("lon") or
+        form_data.get("id") or form_data.get("deviceid")
+    )
+
+    is_traccar_device = bool(device and (device.app_id == "org.traccar.client" or device.manufacturer == "Traccar"))
+
+    if has_traccar_query or has_traccar_form or (is_traccar_device and "application/json" not in content_type):
+        from app.api.traccar import _handle_traccar_request
+        return await _handle_traccar_request(webhook_id, request, db)
+
     try:
         payload = await request.json()
     except Exception:
@@ -34,6 +62,11 @@ async def handle_webhook(
 
     if not isinstance(payload, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload must be a JSON object.")
+
+    # Also detect Traccar JSON payload without HA Companion 'type'
+    if not payload.get("type") and (payload.get("lat") is not None or payload.get("id") is not None or is_traccar_device):
+        from app.api.traccar import _handle_traccar_request
+        return await _handle_traccar_request(webhook_id, request, db)
 
     # Handle Encrypted Webhook Payloads
     # The official Home Assistant Companion App sends encrypted webhooks as:

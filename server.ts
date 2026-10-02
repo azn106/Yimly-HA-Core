@@ -2633,7 +2633,7 @@ const handleTraccarPayload = (req: Request, res: Response) => {
   db.entity_states = db.entity_states || [];
   db.location_history = db.location_history || [];
 
-  const token = req.params.token || req.query.token || req.body?.token;
+  const token = req.params.token || req.params.webhook_id || req.query.token || req.body?.token;
   if (!token || typeof token !== "string") {
     return res.status(401).json({ detail: "Missing or invalid Traccar token" });
   }
@@ -3379,9 +3379,9 @@ app.post("/api/mobile_app/registrations", (req, res) => {
   });
 });
 
-// Home Assistant Companion App Webhook & Telemetry Receiver
-app.post("/api/webhook/:webhook_id", (req, res) => {
-  const webhookId = req.params.webhook_id;
+// Home Assistant Companion App Webhook & Telemetry Receiver (with Traccar backward-compatibility delegation)
+const handleWebhookRequest = (req: Request, res: Response) => {
+  const webhookId = String(req.params.webhook_id || "");
   db = loadDB();
   db.devices = db.devices || [];
 
@@ -3390,6 +3390,30 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
   const isKnownDevice = Boolean(matchingDevice) || webhookId.startsWith("test_webhook");
   if (!isKnownDevice) {
     return res.status(410).json({ detail: "Webhook deleted or not found." });
+  }
+
+  // Detect Traccar telemetry request directed to /api/webhook/{token} for backward compatibility:
+  const isCompanionType = Boolean(req.body && typeof req.body === "object" && req.body.type);
+  const hasTraccarQuery = Boolean(
+    req.query && (
+      req.query.lat !== undefined || req.query.lon !== undefined ||
+      req.query.id !== undefined || req.query.deviceid !== undefined
+    )
+  );
+  const hasTraccarBody = Boolean(
+    req.body && typeof req.body === "object" && (
+      req.body.lat !== undefined || req.body.lon !== undefined ||
+      req.body.id !== undefined || req.body.deviceid !== undefined
+    )
+  );
+  const isTraccarDeviceWithoutType = Boolean(
+    matchingDevice && (matchingDevice.app_id === "org.traccar.client" || matchingDevice.manufacturer === "Traccar") &&
+    !isCompanionType
+  );
+
+  if ((hasTraccarQuery || hasTraccarBody || isTraccarDeviceWithoutType) && !isCompanionType) {
+    req.params.token = webhookId;
+    return handleTraccarPayload(req, res);
   }
 
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
@@ -3480,7 +3504,10 @@ app.post("/api/webhook/:webhook_id", (req, res) => {
     webhook_id: req.params.webhook_id || "default_webhook",
     secret: crypto.randomBytes(16).toString("hex")
   });
-});
+};
+
+app.post("/api/webhook/:webhook_id", handleWebhookRequest);
+app.get("/api/webhook/:webhook_id", handleWebhookRequest);
 
 // Entity States and History Endpoints
 app.get("/api/states", authenticateToken, (req: AuthRequest, res) => {
