@@ -297,7 +297,7 @@ async def api_get_history_period(
             except Exception:
                 pass
 
-    stmt = stmt.order_by(LocationHistory.timestamp.desc()).limit(200)
+    stmt = stmt.order_by(LocationHistory.timestamp.desc())
     res = await db.execute(stmt)
     records = res.scalars().all()
 
